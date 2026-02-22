@@ -11,6 +11,7 @@
 1. Nie zapisuj sekretow w logach.
 2. Maskuj tokeny i naglowki autoryzacyjne.
 3. Ogranicz logowanie payloadow zewnetrznych API.
+4. Nie zapisuj pelnych obrazow w logach/debug dumpach.
 
 ## Dostep
 

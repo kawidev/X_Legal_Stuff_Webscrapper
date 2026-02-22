@@ -16,10 +16,10 @@ Zbudowac pipeline do:
    - lista kont zrodlowych
    - pobieranie postow i metadanych
    - backend `x-api-recent-search` (X API v2 recent search)
-   - pobieranie obrazow
+   - pobieranie obrazow + deduplikacja SHA256
    - deduplikacja
 2. `vision_ocr`
-   - OCR obrazow
+   - OCR obrazow (placeholder / OpenAI vision)
    - confidence score
 3. `llm_enrichment`
    - normalizacja tresci
@@ -44,9 +44,7 @@ Zbudowac pipeline do:
 
 ## Backlog techniczny (najblizszy)
 
-1. Dodac pobieranie i zapis plikow obrazow z metadanych `images`.
-2. Dodac hash SHA256 i deduplikacje obrazow.
-3. Dodac SQLite index (`accounts`, `posts`, `images`, `ocr_results`, `classifications`).
-4. Dodac retry/rate limiting i logowanie bledow HTTP dla X API.
-5. Rozszerzyc mapowanie fraz (`LECTURE #x`) o mapowanie do konkretnej taxonomii modułowej.
-6. Dodac review workflow (manual QA).
+1. Dodac SQLite index (`accounts`, `posts`, `images`, `ocr_results`, `classifications`).
+2. Dodac retry/rate limiting i logowanie bledow HTTP dla X API / OpenAI API.
+3. Rozszerzyc mapowanie fraz (`LECTURE #x`) o mapowanie do konkretnej taxonomii modułowej.
+4. Dodac review workflow (manual QA).

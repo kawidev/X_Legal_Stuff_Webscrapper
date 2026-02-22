@@ -24,6 +24,7 @@ Nie zbieramy danych prywatnych ani nieautoryzowanych.
 1. Dane surowe (`data/raw`) - krotsza retencja, np. 30-180 dni (do ustalenia).
 2. Dane przetworzone (`data/processed`) - retencja projektowa.
 3. Eksporty (`data/exports`) - wersjonowane/oznaczane data.
+4. Obrazy lokalne (`data/raw/images`) - retencja ograniczona i kontrolowana, ze wzgledu na rozmiar i prawa autorskie.
 
 ## Provenance
 
@@ -32,3 +33,4 @@ Kazdy rekord powinien zachowac:
 - autora,
 - timestamp pobrania,
 - wersje pipeline'u/modelu.
+- hash obrazu (`sha256`) oraz lokalizacje pliku (jesli pobrano)
