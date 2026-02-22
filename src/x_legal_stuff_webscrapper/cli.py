@@ -43,7 +43,7 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
 
     tag_filters = args.tags or config.x_filter_tags
     text_filters = args.queries or config.x_filter_keywords
-    use_filters = args.mode == "filtered" or bool(tag_filters or text_filters)
+    use_filters = args.mode == "filtered"
     backend = args.backend if args.backend != "auto" else config.x_collect_backend
 
     try:
@@ -55,6 +55,7 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
             tag_filters=tag_filters if use_filters else None,
             text_filters=text_filters if use_filters else None,
             match_mode=args.match_mode,
+            content_mode=args.content_mode,
         )
     except Exception as exc:
         logger.error("Collect failed: %s", exc)
@@ -68,11 +69,12 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
     append_jsonl(paths["raw_posts"], posts)
     append_jsonl(paths["processed_posts"], posts)
     logger.info(
-        "Collected %s posts from %s accounts (backend=%s, mode=%s, tags=%s, queries=%s, match=%s)",
+        "Collected %s posts from %s accounts (backend=%s, mode=%s, content_mode=%s, tags=%s, queries=%s, match=%s)",
         len(posts),
         len(handles),
         backend,
         "filtered" if use_filters else "all",
+        args.content_mode,
         tag_filters if use_filters else [],
         text_filters if use_filters else [],
         args.match_mode,
@@ -134,9 +136,18 @@ def build_parser() -> argparse.ArgumentParser:
     collect.add_argument("--limit", type=int, default=5, help="Max posts per account")
     collect.add_argument(
         "--backend",
-        choices=["auto", "placeholder", "x-api-recent-search"],
+        choices=[
+            "auto",
+            "placeholder",
+            "recent",
+            "timeline",
+            "all",
+            "x-api-recent-search",
+            "x-api-user-timeline",
+            "x-api-search-all",
+        ],
         default="auto",
-        help="Collection backend (official X API recent search or placeholder)",
+        help="Collection backend (recent search, user timeline, full archive search, or placeholder)",
     )
     collect.add_argument(
         "--mode",
@@ -156,6 +167,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["any", "all"],
         default="any",
         help="How multiple tag/query filters are combined",
+    )
+    collect.add_argument(
+        "--content-mode",
+        choices=["with-images", "only-text", "mixed"],
+        default="mixed",
+        help="Filter posts by content type",
     )
     collect.add_argument(
         "--download-images",

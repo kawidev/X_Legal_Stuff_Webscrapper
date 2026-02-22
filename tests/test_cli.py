@@ -9,6 +9,7 @@ def test_cli_has_expected_subcommands() -> None:
     assert namespace.accounts == ["example"]
     assert namespace.limit == 2
     assert namespace.backend == "auto"
+    assert namespace.content_mode == "mixed"
     assert namespace.download_images is False
 
 
@@ -32,14 +33,15 @@ def test_cli_collect_supports_filter_args() -> None:
     assert namespace.tags == ["ICT"]
     assert namespace.queries == ["ICT 2026 Mentorship"]
     assert namespace.match_mode == "all"
+    assert namespace.content_mode == "mixed"
     assert namespace.download_images is False
 
 
 def test_cli_collect_supports_backend_option() -> None:
     parser = build_parser()
-    namespace = parser.parse_args(["collect", "--backend", "x-api-recent-search"])
+    namespace = parser.parse_args(["collect", "--backend", "timeline"])
 
-    assert namespace.backend == "x-api-recent-search"
+    assert namespace.backend == "timeline"
 
 
 def test_cli_collect_supports_download_images_toggle() -> None:
@@ -47,6 +49,13 @@ def test_cli_collect_supports_download_images_toggle() -> None:
     namespace = parser.parse_args(["collect", "--download-images"])
 
     assert namespace.download_images is True
+
+
+def test_cli_collect_supports_content_mode_option() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["collect", "--content-mode", "with-images"])
+
+    assert namespace.content_mode == "with-images"
 
 
 def test_cli_ocr_supports_backend_and_model() -> None:

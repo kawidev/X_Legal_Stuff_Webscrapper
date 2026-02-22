@@ -3,12 +3,31 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from typing import Literal
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 X_API_BASE_URL = "https://api.x.com/2"
 
-CollectBackend = Literal["placeholder", "x-api-recent-search", "auto"]
+CollectBackend = Literal[
+    "placeholder",
+    "recent",
+    "timeline",
+    "all",
+    "x-api-recent-search",
+    "x-api-user-timeline",
+    "x-api-search-all",
+    "auto",
+]
+ContentMode = Literal["with-images", "only-text", "mixed"]
+
+
+def _normalize_backend(backend: str) -> str:
+    aliases = {
+        "x-api-recent-search": "recent",
+        "x-api-user-timeline": "timeline",
+        "x-api-search-all": "all",
+    }
+    return aliases.get(backend, backend)
 
 
 def _matches_filters(
@@ -30,6 +49,15 @@ def _matches_filters(
     return all(checks) if match_mode == "all" else any(checks)
 
 
+def _matches_content_mode(post: dict, content_mode: ContentMode) -> bool:
+    has_images = bool(post.get("images"))
+    if content_mode == "mixed":
+        return True
+    if content_mode == "with-images":
+        return has_images
+    return not has_images
+
+
 def _normalize_tag(tag: str) -> str:
     return tag.strip().lstrip("#")
 
@@ -38,18 +66,21 @@ def _quote_phrase(value: str) -> str:
     return '"' + value.strip().replace('"', '\\"') + '"'
 
 
-def build_x_recent_search_query(
+def build_x_search_query(
     *,
     handle: str,
     tag_filters: list[str] | None,
     text_filters: list[str] | None,
     match_mode: Literal["any", "all"],
-    require_images: bool = True,
+    content_mode: ContentMode,
 ) -> str:
     parts = [f"from:{handle}"]
-    if require_images:
+    if content_mode == "with-images":
         parts.append("has:images")
-    parts.append("-is:retweet")
+    elif content_mode == "only-text":
+        # X query operators vary by media type; `-has:images` catches image posts.
+        # Final filtering is also enforced locally for consistency across backends.
+        parts.append("-has:images")
 
     filter_terms: list[str] = []
     for tag in tag_filters or []:
@@ -118,28 +149,78 @@ def _extract_images(tweet: dict, includes: dict) -> list[dict]:
     return images
 
 
-def _fetch_x_recent_search_posts_for_handle(
+def _build_post_row(
     *,
+    tweet: dict,
+    includes: dict,
+    author_handle: str,
+    author_name: str | None,
+    source_backend: str,
+    scraped_at: str,
+    tag_filters: list[str] | None,
+    text_filters: list[str] | None,
+    match_mode: Literal["any", "all"],
+    content_mode: ContentMode,
+    x_query: str | None = None,
+) -> dict:
+    row = {
+        "post_id": tweet.get("id"),
+        "author_handle": author_handle,
+        "author_name": author_name,
+        "published_at": tweet.get("created_at"),
+        "scraped_at": scraped_at,
+        "url": f"https://x.com/{author_handle}/status/{tweet.get('id')}",
+        "text": tweet.get("text", ""),
+        "hashtags": _extract_hashtags(tweet),
+        "lang": tweet.get("lang"),
+        "public_metrics": tweet.get("public_metrics", {}),
+        "source_backend": source_backend,
+        "filter_context": {
+            "tag_filters": tag_filters or [],
+            "text_filters": text_filters or [],
+            "match_mode": match_mode,
+            "content_mode": content_mode,
+        },
+        "images": _extract_images(tweet, includes),
+    }
+    if x_query is not None:
+        row["x_query"] = x_query
+    return row
+
+
+def _search_endpoint_path(search_backend: str) -> str:
+    if search_backend == "recent":
+        return "/tweets/search/recent"
+    if search_backend == "all":
+        return "/tweets/search/all"
+    raise ValueError(f"Unsupported search backend: {search_backend}")
+
+
+def _fetch_x_search_posts_for_handle(
+    *,
+    search_backend: Literal["recent", "all"],
     handle: str,
     limit_per_account: int,
     bearer_token: str,
     tag_filters: list[str] | None,
     text_filters: list[str] | None,
     match_mode: Literal["any", "all"],
+    content_mode: ContentMode,
 ) -> list[dict]:
-    query = build_x_recent_search_query(
+    query = build_x_search_query(
         handle=handle,
         tag_filters=tag_filters,
         text_filters=text_filters,
         match_mode=match_mode,
+        content_mode=content_mode,
     )
     rows: list[dict] = []
     next_token: str | None = None
-    fetched = 0
     page_size = min(max(limit_per_account, 10), 100)
     scraped_at = datetime.now(UTC).isoformat()
+    endpoint_path = _search_endpoint_path(search_backend)
 
-    while fetched < limit_per_account:
+    while len(rows) < limit_per_account:
         params = {
             "query": query,
             "max_results": str(page_size),
@@ -151,38 +232,108 @@ def _fetch_x_recent_search_posts_for_handle(
         if next_token:
             params["next_token"] = next_token
 
-        url = f"{X_API_BASE_URL}/tweets/search/recent?{urlencode(params)}"
+        url = f"{X_API_BASE_URL}{endpoint_path}?{urlencode(params)}"
         payload = _http_get_json(url, bearer_token=bearer_token)
         includes = payload.get("includes", {})
         users_by_id = {u.get("id"): u for u in includes.get("users", [])}
 
         for tweet in payload.get("data", []):
             author = users_by_id.get(tweet.get("author_id"), {})
-            author_handle = author.get("username") or handle
-            rows.append(
-                {
-                    "post_id": tweet.get("id"),
-                    "author_handle": author_handle,
-                    "author_name": author.get("name"),
-                    "published_at": tweet.get("created_at"),
-                    "scraped_at": scraped_at,
-                    "url": f"https://x.com/{author_handle}/status/{tweet.get('id')}",
-                    "text": tweet.get("text", ""),
-                    "hashtags": _extract_hashtags(tweet),
-                    "lang": tweet.get("lang"),
-                    "public_metrics": tweet.get("public_metrics", {}),
-                    "source_backend": "x-api-recent-search",
-                    "x_query": query,
-                    "filter_context": {
-                        "tag_filters": tag_filters or [],
-                        "text_filters": text_filters or [],
-                        "match_mode": match_mode,
-                    },
-                    "images": _extract_images(tweet, includes),
-                }
+            row = _build_post_row(
+                tweet=tweet,
+                includes=includes,
+                author_handle=author.get("username") or handle,
+                author_name=author.get("name"),
+                source_backend=f"x-api-search-{search_backend}",
+                scraped_at=scraped_at,
+                tag_filters=tag_filters,
+                text_filters=text_filters,
+                match_mode=match_mode,
+                content_mode=content_mode,
+                x_query=query,
             )
-            fetched += 1
-            if fetched >= limit_per_account:
+            if _matches_content_mode(row, content_mode):
+                rows.append(row)
+            if len(rows) >= limit_per_account:
+                break
+
+        meta = payload.get("meta") or {}
+        next_token = meta.get("next_token")
+        if not next_token or not payload.get("data"):
+            break
+
+    return rows
+
+
+def _get_x_user_by_username(*, handle: str, bearer_token: str) -> dict:
+    url = (
+        f"{X_API_BASE_URL}/users/by/username/{quote(handle)}?"
+        + urlencode({"user.fields": "id,name,username"})
+    )
+    payload = _http_get_json(url, bearer_token=bearer_token)
+    data = payload.get("data")
+    if not data:
+        raise ValueError(f"User not found in X API: {handle}")
+    return data
+
+
+def _fetch_x_timeline_posts_for_handle(
+    *,
+    handle: str,
+    limit_per_account: int,
+    bearer_token: str,
+    tag_filters: list[str] | None,
+    text_filters: list[str] | None,
+    match_mode: Literal["any", "all"],
+    content_mode: ContentMode,
+) -> list[dict]:
+    user = _get_x_user_by_username(handle=handle, bearer_token=bearer_token)
+    user_id = user["id"]
+    author_handle = user.get("username", handle)
+    author_name = user.get("name")
+    rows: list[dict] = []
+    next_token: str | None = None
+    page_size = min(max(limit_per_account, 10), 100)
+    scraped_at = datetime.now(UTC).isoformat()
+
+    while len(rows) < limit_per_account:
+        params = {
+            "max_results": str(page_size),
+            "tweet.fields": "id,text,created_at,entities,attachments,lang,public_metrics",
+            "expansions": "attachments.media_keys",
+            "media.fields": "media_key,type,url,preview_image_url,width,height,alt_text",
+        }
+        if next_token:
+            params["pagination_token"] = next_token
+
+        url = f"{X_API_BASE_URL}/users/{user_id}/tweets?{urlencode(params)}"
+        payload = _http_get_json(url, bearer_token=bearer_token)
+        includes = payload.get("includes", {})
+        for tweet in payload.get("data", []):
+            row = _build_post_row(
+                tweet=tweet,
+                includes=includes,
+                author_handle=author_handle,
+                author_name=author_name,
+                source_backend="x-api-user-timeline",
+                scraped_at=scraped_at,
+                tag_filters=tag_filters,
+                text_filters=text_filters,
+                match_mode=match_mode,
+                content_mode=content_mode,
+                x_query=None,
+            )
+            if not _matches_content_mode(row, content_mode):
+                continue
+            if not _matches_filters(
+                row,
+                tag_filters=tag_filters,
+                text_filters=text_filters,
+                match_mode=match_mode,
+            ):
+                continue
+            rows.append(row)
+            if len(rows) >= limit_per_account:
                 break
 
         meta = payload.get("meta") or {}
@@ -200,6 +351,7 @@ def _collect_placeholder_posts(
     tag_filters: list[str] | None,
     text_filters: list[str] | None,
     match_mode: Literal["any", "all"],
+    content_mode: ContentMode,
 ) -> list[dict]:
     now = datetime.now(UTC).isoformat()
     rows: list[dict] = []
@@ -211,6 +363,17 @@ def _collect_placeholder_posts(
                 f"ICT 2026 Mentorship ... LECTURE #{idx} notes by @{handle}"
                 if idx % 2
                 else f"Market structure recap from @{handle}"
+            )
+            images = (
+                []
+                if idx % 3 == 0
+                else [
+                    {
+                        "image_id": f"{post_id}-img-1",
+                        "source_url": f"https://example.invalid/{post_id}.jpg",
+                        "file_path": None,
+                    }
+                ]
             )
             row = {
                 "post_id": post_id,
@@ -225,22 +388,20 @@ def _collect_placeholder_posts(
                     "tag_filters": tag_filters or [],
                     "text_filters": text_filters or [],
                     "match_mode": match_mode,
+                    "content_mode": content_mode,
                 },
-                "images": [
-                    {
-                        "image_id": f"{post_id}-img-1",
-                        "source_url": f"https://example.invalid/{post_id}.jpg",
-                        "file_path": None,
-                    }
-                ],
+                "images": images,
             }
-            if _matches_filters(
+            if not _matches_content_mode(row, content_mode):
+                continue
+            if not _matches_filters(
                 row,
                 tag_filters=tag_filters,
                 text_filters=text_filters,
                 match_mode=match_mode,
             ):
-                rows.append(row)
+                continue
+            rows.append(row)
     return rows
 
 
@@ -253,25 +414,46 @@ def collect_public_posts(
     tag_filters: list[str] | None = None,
     text_filters: list[str] | None = None,
     match_mode: Literal["any", "all"] = "any",
+    content_mode: ContentMode = "mixed",
 ) -> list[dict]:
-    """Collect posts via official X API recent search or fallback placeholder backend."""
-    selected_backend: CollectBackend = backend
+    """Collect posts using X API backends (`recent`, `timeline`, `all`) or placeholder."""
+    selected_backend = _normalize_backend(backend)
     if selected_backend == "auto":
-        selected_backend = "x-api-recent-search" if x_api_bearer_token else "placeholder"
+        selected_backend = "timeline" if x_api_bearer_token else "placeholder"
 
-    if selected_backend == "x-api-recent-search":
+    if selected_backend in {"recent", "all", "timeline"}:
         if not x_api_bearer_token:
-            raise ValueError("X_API_BEARER_TOKEN is required for backend 'x-api-recent-search'")
+            raise ValueError(f"X_API_BEARER_TOKEN is required for backend '{selected_backend}'")
+
+    if selected_backend in {"recent", "all"}:
         rows: list[dict] = []
         for handle in handles:
             rows.extend(
-                _fetch_x_recent_search_posts_for_handle(
+                _fetch_x_search_posts_for_handle(
+                    search_backend=selected_backend,
                     handle=handle,
                     limit_per_account=limit_per_account,
-                    bearer_token=x_api_bearer_token,
+                    bearer_token=x_api_bearer_token or "",
                     tag_filters=tag_filters,
                     text_filters=text_filters,
                     match_mode=match_mode,
+                    content_mode=content_mode,
+                )
+            )
+        return rows
+
+    if selected_backend == "timeline":
+        rows = []
+        for handle in handles:
+            rows.extend(
+                _fetch_x_timeline_posts_for_handle(
+                    handle=handle,
+                    limit_per_account=limit_per_account,
+                    bearer_token=x_api_bearer_token or "",
+                    tag_filters=tag_filters,
+                    text_filters=text_filters,
+                    match_mode=match_mode,
+                    content_mode=content_mode,
                 )
             )
         return rows
@@ -282,4 +464,5 @@ def collect_public_posts(
         tag_filters=tag_filters,
         text_filters=text_filters,
         match_mode=match_mode,
+        content_mode=content_mode,
     )
