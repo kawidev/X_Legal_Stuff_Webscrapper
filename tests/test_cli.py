@@ -87,3 +87,35 @@ def test_cli_qa_knowledge_supports_input_and_no_write() -> None:
     assert namespace.input == "sample.jsonl"
     assert namespace.max_records == 5
     assert namespace.no_write is True
+
+
+def test_cli_schema_knowledge_supports_output() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["schema-knowledge", "--output", "schema.json"])
+
+    assert namespace.command == "schema-knowledge"
+    assert namespace.output == "schema.json"
+
+
+def test_cli_gate_knowledge_export_supports_thresholds() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(
+        [
+            "gate-knowledge-export",
+            "--refresh-qa",
+            "--min-evidence-resolution-rate",
+            "0.9",
+            "--min-semantic-evidence-rate",
+            "0.8",
+            "--max-broken-refs",
+            "1",
+            "--fail-on-run-gate",
+        ]
+    )
+
+    assert namespace.command == "gate-knowledge-export"
+    assert namespace.refresh_qa is True
+    assert namespace.min_evidence_resolution_rate == 0.9
+    assert namespace.min_semantic_evidence_rate == 0.8
+    assert namespace.max_broken_refs == 1
+    assert namespace.fail_on_run_gate is True

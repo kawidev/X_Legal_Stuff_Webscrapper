@@ -5,6 +5,9 @@ import re
 from collections import Counter
 from typing import Any
 
+from .knowledge_gate import categorize_issue
+from .knowledge_schema import validate_canonical_knowledge_contract
+
 
 SEMANTIC_STATUS_ALLOWED = {"observed", "inferred", "uncertain"}
 MAPPING_STATUS_ALLOWED = {"candidate"}
@@ -496,7 +499,9 @@ def validate_canonical_knowledge_record(record: dict) -> dict:
     if job_status == "partial" and (not isinstance(missing_data, list) or len(missing_data) == 0):
         warnings.append({"code": "partial_without_missing_data_reason", "path": "quality_control.missing_data", "message": "partial without missing_data"})
 
-    return {"errors": errors, "warnings": warnings, "metrics": metrics}
+    schema_contract = validate_canonical_knowledge_contract(record)
+    metrics["schema_contract_error_count"] = len(schema_contract.get("errors") or [])
+    return {"errors": errors, "warnings": warnings, "metrics": metrics, "schema_contract": schema_contract}
 
 
 def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
@@ -505,6 +510,8 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
     action_counts: Counter[str] = Counter()
     action_detail_counts: Counter[str] = Counter()
     status_counts: Counter[str] = Counter()
+    error_category_counts: Counter[str] = Counter()
+    warning_category_counts: Counter[str] = Counter()
     agg = {
         "error_count_total": 0,
         "warning_count_total": 0,
@@ -517,6 +524,7 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
         "semantic_items_with_evidence": 0,
         "missing_status_count": 0,
         "observed_hedging_warnings_count": 0,
+        "schema_contract_error_count_total": 0,
     }
     pre_schema = {"records_with_drift": 0, "mixed_type_arrays_count": 0, "mixed_type_arrays_records": 0, "empty_image_descriptions_skeleton_count": 0}
 
@@ -543,7 +551,14 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
                 agg[k] += int(v["metrics"][k])
         agg["error_count_total"] += len(v["errors"])
         agg["warning_count_total"] += len(v["warnings"])
+        agg["schema_contract_error_count_total"] += len((v.get("schema_contract") or {}).get("errors") or [])
         status_counts[str(_ensure_dict(c.get("job_meta")).get("status") or "unknown")] += 1
+        for issue in v["errors"]:
+            error_category_counts[categorize_issue(str(issue.get("code") or ""))] += 1
+        for issue in (v.get("schema_contract") or {}).get("errors") or []:
+            error_category_counts["structural"] += 1
+        for issue in v["warnings"]:
+            warning_category_counts[categorize_issue(str(issue.get("code") or ""))] += 1
 
         record_reports.append(
             {
@@ -563,11 +578,16 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
         "schema_drift_stats_pre_canonicalization": pre_schema,
         "canonicalization_actions_count": dict(action_counts),
         "canonicalization_actions_by_detail_top20": dict(action_detail_counts.most_common(20)),
+        "warning_category_counts": dict(warning_category_counts),
+        "error_category_counts": dict(error_category_counts),
         "quality_gate_metrics": {
             **agg,
             "evidence_resolution_rate": (agg["evidence_refs_resolved"] / agg["evidence_refs_total"]) if agg["evidence_refs_total"] else 1.0,
             "provenance_utilization_rate": (agg["provenance_refs_used_count"] / agg["provenance_ref_count"]) if agg["provenance_ref_count"] else 0.0,
             "semantic_items_with_evidence_rate": (agg["semantic_items_with_evidence"] / agg["semantic_items_total"]) if agg["semantic_items_total"] else 0.0,
+            "structural_warnings_count": int(warning_category_counts.get("structural", 0)),
+            "semantic_warnings_count": int(warning_category_counts.get("semantic", 0)),
+            "provenance_warnings_count": int(warning_category_counts.get("provenance", 0)),
         },
     }
     return {"canonical_records": canonical_records, "record_reports": record_reports, "qa_report": qa_report}
