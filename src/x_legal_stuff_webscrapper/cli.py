@@ -8,8 +8,13 @@ from .classifier import classify_posts
 from .collector_x import collect_public_posts
 from .config import AppConfig
 from .exporter import export_dataset
-from .knowledge_gate import default_export_gate_policy, evaluate_run_export_gate
+from .knowledge_gate import (
+    default_export_gate_policy,
+    evaluate_run_export_gate,
+    load_export_gate_policy_from_json,
+)
 from .knowledge_extractor import extract_knowledge_records
+from .knowledge_library_export import export_knowledge_library_streams
 from .knowledge_quality import run_quality_gates_for_knowledge_records
 from .knowledge_schema import canonical_knowledge_record_json_schema
 from .llm_enrichment import enrich_posts
@@ -38,6 +43,9 @@ def _paths(data_dir: Path) -> dict[str, Path]:
         "knowledge_export_gate_report": data_dir / "processed" / "knowledge_export_gate_report.json",
         "knowledge_export_pass": data_dir / "processed" / "knowledge_export_pass.jsonl",
         "knowledge_export_fail": data_dir / "processed" / "knowledge_export_fail.jsonl",
+        "knowledge_library_ready": data_dir / "processed" / "knowledge_library_ready.jsonl",
+        "knowledge_library_rejects": data_dir / "processed" / "knowledge_library_rejects.jsonl",
+        "knowledge_library_export_report": data_dir / "processed" / "knowledge_library_export_report.json",
         "enrich": data_dir / "processed" / "llm_results.jsonl",
         "processed_posts": data_dir / "processed" / "posts.jsonl",
         "classifications": data_dir / "processed" / "classifications.jsonl",
@@ -209,16 +217,33 @@ def _compute_or_load_knowledge_qa(paths: dict[str, Path], refresh: bool) -> tupl
     return canonical_records, quality_records, qa_report
 
 
-def cmd_gate_knowledge_export(args: argparse.Namespace, config: AppConfig) -> int:
-    logger = logging.getLogger("gate_knowledge_export")
-    paths = _paths(config.data_dir)
-    canonical_records, quality_records, qa_report = _compute_or_load_knowledge_qa(paths, refresh=args.refresh_qa)
+def _load_gate_policy(args: argparse.Namespace) -> dict:
+    if getattr(args, "policy_file", None):
+        return load_export_gate_policy_from_json(args.policy_file)
+    return default_export_gate_policy()
 
-    policy = default_export_gate_policy()
-    policy["run_thresholds"]["min_evidence_resolution_rate"] = args.min_evidence_resolution_rate
-    policy["run_thresholds"]["min_semantic_items_with_evidence_rate"] = args.min_semantic_evidence_rate
-    policy["run_thresholds"]["max_broken_refs_count"] = args.max_broken_refs
 
+def _apply_gate_threshold_overrides(policy: dict, args: argparse.Namespace) -> dict:
+    policy = dict(policy)
+    run_thresholds = dict(policy.get("run_thresholds") or {})
+    if getattr(args, "min_evidence_resolution_rate", None) is not None:
+        run_thresholds["min_evidence_resolution_rate"] = args.min_evidence_resolution_rate
+    if getattr(args, "min_semantic_evidence_rate", None) is not None:
+        run_thresholds["min_semantic_items_with_evidence_rate"] = args.min_semantic_evidence_rate
+    if getattr(args, "max_broken_refs", None) is not None:
+        run_thresholds["max_broken_refs_count"] = args.max_broken_refs
+    policy["run_thresholds"] = run_thresholds
+    return policy
+
+
+def _compute_or_load_gate(
+    paths: dict[str, Path],
+    canonical_records: list[dict],
+    quality_records: list[dict],
+    qa_report: dict,
+    *,
+    policy: dict,
+) -> dict:
     gate = evaluate_run_export_gate(
         canonical_records=canonical_records,
         record_reports=quality_records,
@@ -228,6 +253,15 @@ def cmd_gate_knowledge_export(args: argparse.Namespace, config: AppConfig) -> in
     write_json(paths["knowledge_export_gate_report"], gate["gate_report"])
     write_jsonl(paths["knowledge_export_pass"], gate["accepted_records"])
     write_jsonl(paths["knowledge_export_fail"], gate["rejected_records"])
+    return gate
+
+
+def cmd_gate_knowledge_export(args: argparse.Namespace, config: AppConfig) -> int:
+    logger = logging.getLogger("gate_knowledge_export")
+    paths = _paths(config.data_dir)
+    canonical_records, quality_records, qa_report = _compute_or_load_knowledge_qa(paths, refresh=args.refresh_qa)
+    policy = _apply_gate_threshold_overrides(_load_gate_policy(args), args)
+    gate = _compute_or_load_gate(paths, canonical_records, quality_records, qa_report, policy=policy)
 
     logger.info(
         "Knowledge export gate: run_passed=%s, accepted=%s, rejected=%s",
@@ -236,6 +270,34 @@ def cmd_gate_knowledge_export(args: argparse.Namespace, config: AppConfig) -> in
         len(gate["rejected_records"]),
     )
     if args.fail_on_run_gate and not gate["gate_report"]["run_gate_passed"]:
+        return 1
+    return 0
+
+
+def cmd_export_knowledge_library(args: argparse.Namespace, config: AppConfig) -> int:
+    logger = logging.getLogger("export_knowledge_library")
+    paths = _paths(config.data_dir)
+    canonical_records, quality_records, qa_report = _compute_or_load_knowledge_qa(paths, refresh=args.refresh_qa)
+    policy = _apply_gate_threshold_overrides(_load_gate_policy(args), args)
+    gate = _compute_or_load_gate(paths, canonical_records, quality_records, qa_report, policy=policy)
+
+    export_result = export_knowledge_library_streams(
+        canonical_records=canonical_records,
+        record_reports=quality_records,
+        gate_report=gate["gate_report"],
+        schema_contract_version=args.schema_contract_version,
+    )
+    write_jsonl(paths["knowledge_library_ready"], export_result["ready_records"])
+    write_jsonl(paths["knowledge_library_rejects"], export_result["reject_records"])
+    write_json(paths["knowledge_library_export_report"], export_result["export_report"])
+
+    logger.info(
+        "Knowledge library export: ready=%s rejects=%s run_gate_passed=%s",
+        export_result["export_report"]["ready_count"],
+        export_result["export_report"]["reject_count"],
+        export_result["export_report"]["run_gate_passed"],
+    )
+    if args.fail_on_run_gate and not export_result["export_report"]["run_gate_passed"]:
         return 1
     return 0
 
@@ -328,10 +390,19 @@ def build_parser() -> argparse.ArgumentParser:
     schema_cmd.add_argument("--output", help="Optional output path for JSON Schema")
     gate = subparsers.add_parser("gate-knowledge-export", help="Apply severity policy and export gate to canonical knowledge records")
     gate.add_argument("--refresh-qa", action="store_true", help="Recompute QA artifacts from processed/knowledge_extract.jsonl before gating")
+    gate.add_argument("--policy-file", help="Optional JSON file overriding export gate policy")
     gate.add_argument("--min-evidence-resolution-rate", type=float, default=1.0, help="Run gate threshold for evidence ref resolution rate")
     gate.add_argument("--min-semantic-evidence-rate", type=float, default=1.0, help="Run gate threshold for semantic items with evidence")
     gate.add_argument("--max-broken-refs", type=int, default=0, help="Run gate threshold for broken refs")
     gate.add_argument("--fail-on-run-gate", action="store_true", help="Return non-zero exit code if run-level gate fails")
+    export_lib = subparsers.add_parser("export-knowledge-library", help="Export ready/reject streams for TRADING_WORD curation")
+    export_lib.add_argument("--refresh-qa", action="store_true", help="Recompute QA artifacts from processed/knowledge_extract.jsonl before export")
+    export_lib.add_argument("--policy-file", help="Optional JSON file overriding export gate policy")
+    export_lib.add_argument("--min-evidence-resolution-rate", type=float, default=1.0, help="Run gate threshold for evidence ref resolution rate")
+    export_lib.add_argument("--min-semantic-evidence-rate", type=float, default=1.0, help="Run gate threshold for semantic items with evidence")
+    export_lib.add_argument("--max-broken-refs", type=int, default=0, help="Run gate threshold for broken refs")
+    export_lib.add_argument("--schema-contract-version", default="knowledge-canonical-contract-v1", help="Schema contract version tag embedded in library export")
+    export_lib.add_argument("--fail-on-run-gate", action="store_true", help="Return non-zero exit code if run-level gate fails")
     subparsers.add_parser("classify", help="Run enrichment and classification")
     subparsers.add_parser("export", help="Export normalized dataset")
     return parser
@@ -351,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
         "qa-knowledge": cmd_qa_knowledge,
         "schema-knowledge": cmd_schema_knowledge,
         "gate-knowledge-export": cmd_gate_knowledge_export,
+        "export-knowledge-library": cmd_export_knowledge_library,
         "classify": cmd_classify,
         "export": cmd_export,
     }

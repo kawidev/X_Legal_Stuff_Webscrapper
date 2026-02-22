@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
+from pathlib import Path
 from typing import Any
 
 
@@ -56,6 +58,23 @@ def default_export_gate_policy() -> dict[str, Any]:
             "max_broken_refs_count": 0,
         },
     }
+
+
+def merge_export_gate_policy(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = merge_export_gate_policy(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def load_export_gate_policy_from_json(path: str | Path) -> dict[str, Any]:
+    data = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    if not isinstance(data, dict):
+        raise ValueError("Policy JSON must be an object")
+    return merge_export_gate_policy(default_export_gate_policy(), data)
 
 
 def _schema_contract_issues(record_report: dict) -> list[dict]:

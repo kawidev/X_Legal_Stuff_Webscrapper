@@ -2,6 +2,8 @@ from x_legal_stuff_webscrapper.knowledge_gate import (
     default_export_gate_policy,
     evaluate_record_export_gate,
     evaluate_run_export_gate,
+    load_export_gate_policy_from_json,
+    merge_export_gate_policy,
 )
 
 
@@ -61,3 +63,15 @@ def test_run_gate_applies_thresholds() -> None:
     )
     assert result["gate_report"]["run_gate_passed"] is False
     assert result["gate_report"]["run_threshold_issues"]
+
+
+def test_merge_export_gate_policy_overrides_nested_thresholds() -> None:
+    merged = merge_export_gate_policy(default_export_gate_policy(), {"run_thresholds": {"max_broken_refs_count": 2}})
+    assert merged["run_thresholds"]["max_broken_refs_count"] == 2
+
+
+def test_load_export_gate_policy_from_json_supports_utf8_bom(tmp_path) -> None:
+    path = tmp_path / "policy.json"
+    path.write_text('{"run_thresholds":{"max_broken_refs_count":3}}', encoding="utf-8-sig")
+    policy = load_export_gate_policy_from_json(path)
+    assert policy["run_thresholds"]["max_broken_refs_count"] == 3

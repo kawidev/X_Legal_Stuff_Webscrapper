@@ -119,3 +119,30 @@ def test_cli_gate_knowledge_export_supports_thresholds() -> None:
     assert namespace.min_semantic_evidence_rate == 0.8
     assert namespace.max_broken_refs == 1
     assert namespace.fail_on_run_gate is True
+
+
+def test_cli_gate_knowledge_export_supports_policy_file() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["gate-knowledge-export", "--policy-file", "policy.json"])
+
+    assert namespace.command == "gate-knowledge-export"
+    assert namespace.policy_file == "policy.json"
+
+
+def test_cli_export_knowledge_library_supports_options() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(
+        [
+            "export-knowledge-library",
+            "--policy-file",
+            "policy.json",
+            "--schema-contract-version",
+            "knowledge-canonical-contract-v1",
+            "--fail-on-run-gate",
+        ]
+    )
+
+    assert namespace.command == "export-knowledge-library"
+    assert namespace.policy_file == "policy.json"
+    assert namespace.schema_contract_version == "knowledge-canonical-contract-v1"
+    assert namespace.fail_on_run_gate is True
