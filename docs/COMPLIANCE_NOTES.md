@@ -19,3 +19,16 @@ Publiczna dostepnosc tresci nie oznacza automatycznie prawa do dowolnej redystry
 2. Zachowac provenance i zrodlo dla kazdego rekordu.
 3. Nie publikowac ponownie pobranych obrazow bez podstawy prawnej.
 4. Oznaczyc projekt jako narzedzie analityczne, nie zrodlo porad inwestycyjnych.
+5. Rozdzielac rekordy dopuszczone do kuracji od rekordow odrzuconych (`knowledge_library_ready` vs `knowledge_library_rejects`) i zachowac powod odrzucenia.
+
+## Governance danych (jakość i audyt)
+
+Projekt posiada warstwe kontroli jakosci przed ingestem do biblioteki wiedzy:
+- canonicalizer + validator (`qa-knowledge`)
+- severity policy / export gate (`gate-knowledge-export`)
+- profile rygoru (`strict`, `balanced`, `permissive`)
+
+To nie jest gwarancja prawna poprawnosci danych, ale:
+- ogranicza ryzyko użycia rekordow z broken lineage,
+- poprawia audytowalnosc pochodzenia i transformacji danych,
+- pozwala swiadomie dobierac poziom rygoru do celu (kuracja vs research).

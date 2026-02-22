@@ -13,6 +13,7 @@
 3. Nie pobieramy tresci z kont prywatnych ani z ograniczonym dostepem.
 4. Dopuszczalne sa dwa tryby zbierania: calosciowy i selektywny (tagi/frazy), zalezne od celu sesji.
 5. Dla sesji selektywnych nalezy zapisac zastosowane filtry (np. `ICT`, `MENTORSHIP`, `LECTURE #x`).
+6. Dla sesji zasilajacych biblioteke wiedzy nalezy zachowac artefakty QA/gate (`knowledge_qa_report`, `knowledge_export_gate_report`) jako kontekst jakosci runu.
 
 ## Lista startowa
 

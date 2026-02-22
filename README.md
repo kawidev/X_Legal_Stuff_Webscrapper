@@ -5,13 +5,17 @@ na potrzeby analizy merytorycznej tresci tradingowych (ICT i pokrewne zagadnieni
 
 ## Status
 
-Repo zawiera szkielet projektu:
+Repo zawiera dzialajacy pipeline roboczy (MVP+):
 - `collect` - pobieranie postow (`recent`, `timeline`, `all`, `placeholder`)
 - `collect` wspiera tryb `all` oraz `filtered` (tagi/frazy)
 - `collect --download-images` - pobieranie obrazow z deduplikacja (SHA256)
 - `ocr` - ekstrakcja tekstu z obrazow (`placeholder` lub `openai-vision`)
 - `extract-knowledge` - semantyczna ekstrakcja wiedzy do JSON AI-ready (OpenAI / placeholder)
 - `classify` - wzbogacanie i klasyfikacja tresci (placeholder)
+- `qa-knowledge` - canonicalizer + strict validator + QA report (`knowledge_extract`)
+- `schema-knowledge` - eksport JSON Schema dla kanonicznego rekordu wiedzy
+- `gate-knowledge-export` - severity policy + export gate (record/run level)
+- `export-knowledge-library` - eksport `ready/rejects` pod kuracje biblioteki wiedzy (TRADING_WORD)
 - `export` - eksport prostego datasetu JSONL
 
 ## Uruchomienie (MVP skeleton)
@@ -26,6 +30,10 @@ python -m x_legal_stuff_webscrapper collect --account example_handle --backend x
 python -m x_legal_stuff_webscrapper collect --account example_handle --mode filtered --tag ICT --tag MENTORSHIP --query "ICT 2026 Mentorship" --query "LECTURE #1"
 python -m x_legal_stuff_webscrapper ocr --backend openai-vision --model gpt-4.1-mini
 python -m x_legal_stuff_webscrapper extract-knowledge --backend openai --model gpt-4.1-mini --max-posts 1
+python -m x_legal_stuff_webscrapper qa-knowledge
+python -m x_legal_stuff_webscrapper schema-knowledge
+python -m x_legal_stuff_webscrapper gate-knowledge-export --policy-file .\\policies\\knowledge_library_ingest.balanced.json
+python -m x_legal_stuff_webscrapper export-knowledge-library --policy-file .\\policies\\knowledge_library_ingest.balanced.json
 python -m x_legal_stuff_webscrapper classify
 python -m x_legal_stuff_webscrapper export
 ```
@@ -106,6 +114,67 @@ $env:DATA_DIR=".\\data\\drevax_ocr_sample_3"
 python x_scrapper.py extract-knowledge --backend openai --model gpt-4.1-mini --max-posts 1
 ```
 
+## Quality Gates i kontrakt danych (`knowledge_extract`)
+
+Pipeline zawiera warstwe uszczelniania kontraktu danych:
+
+1. `canonicalizer`
+- normalizuje aliasy pol i typy (np. `concept -> term`, `from -> subject`)
+- zachowuje oryginalne pola + dopisuje pola kanoniczne
+- dodaje per-item debug provenance:
+  - `_canonicalized`
+  - `_canonicalization_notes`
+
+2. `strict validator`
+- waliduje typy, statusy, `evidence_refs`, broken refs
+- rozroznia warningi strukturalne / semantyczne / provenance
+
+3. `qa report`
+- agreguje metryki runu (schema drift, evidence resolution, warning categories)
+
+Artefakty (`qa-knowledge`):
+- `processed/knowledge_extract_canonical.jsonl`
+- `processed/knowledge_quality_records.jsonl`
+- `processed/knowledge_canonicalization_trace.jsonl`
+- `processed/knowledge_qa_report.json`
+- `processed/knowledge_canonical.schema.json` (po `schema-knowledge`)
+
+## Export gate i biblioteka wiedzy (`TRADING_WORD`)
+
+`gate-knowledge-export` stosuje severity policy (domyslna lub z pliku JSON) i wylicza:
+- pass/fail per rekord
+- pass/fail run-level
+- powody odrzucen (`errors` / `warnings` z kategoriami)
+
+`export-knowledge-library` buduje dwa strumienie:
+- `processed/knowledge_library_ready.jsonl`
+- `processed/knowledge_library_rejects.jsonl`
+
+Kazdy rekord `ready` zawiera:
+- `library_ingest_meta`
+- `source_ref`
+- `quality_snapshot`
+- `canonical_record`
+- `curation_hints`
+
+Kazdy rekord `reject` zawiera:
+- `reject_meta`
+- `source_ref`
+- `gate_result.reject_reasons[]`
+- `quality_snapshot`
+
+## Policy Profiles (draft)
+
+Repo zawiera profile polityk ingestu do biblioteki wiedzy:
+- `policies/knowledge_library_ingest.strict.json`
+- `policies/knowledge_library_ingest.balanced.json`
+- `policies/knowledge_library_ingest.permissive.json`
+
+Skrót:
+- `strict` - niski szum, blokuje wiecej warningow semantycznych/provenance, nie wpuszcza `partial`
+- `balanced` - domyslny tryb roboczy, chroni przed structural/provenance problems, wpuszcza wiekszosc sensownych rekordow
+- `permissive` - research/exploration, luzniejsze progi, nadal nie wpuszcza broken lineage
+
 ## Dokumentacja
 
-Szczegoly planu i wymagan formalnych znajduja sie w `docs/`.
+Szczegoly planu, audytu i wymagan formalnych znajduja sie w `docs/`.

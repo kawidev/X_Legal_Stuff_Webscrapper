@@ -30,3 +30,13 @@
 
 1. `ICT 2026 Mentorship` -> `label: ICT Full Mentoring 2026`, `series: ICT 2026 Mentorship`
 2. `LECTURE #12` -> `label: ICT Full Mentoring 2026`, `series: ICT 2026 Mentorship`, `module: Lecture #12`
+
+## Relacja do biblioteki wiedzy (TRADING_WORD)
+
+Taxonomia w tym repo nie jest jeszcze kanonem wiedzy.
+Aktualnie sluzy do:
+1. wstepnego tagowania / klasyfikacji roboczej,
+2. podpowiedzi `curation_hints.suggested_focus`,
+3. organizacji materialu do dalszej kuracji w `knowledge_library_ready.jsonl`.
+
+Decyzje kanoniczne (definicje, relacje, warianty) powinny byc podejmowane na etapie kuracji biblioteki wiedzy, a nie przez sam extractor.
