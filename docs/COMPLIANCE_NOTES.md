@@ -15,6 +15,7 @@ Publiczna dostepnosc tresci nie oznacza automatycznie prawa do dowolnej redystry
 ## Wymagania operacyjne
 
 1. Preferowac oficjalne API lub backend zgodny z warunkami platformy.
+2. Dla backendu X API dokumentowac uzyty endpoint, parametry query i zakres czasowy (np. `recent search`).
 2. Zachowac provenance i zrodlo dla kazdego rekordu.
 3. Nie publikowac ponownie pobranych obrazow bez podstawy prawnej.
 4. Oznaczyc projekt jako narzedzie analityczne, nie zrodlo porad inwestycyjnych.

@@ -25,3 +25,8 @@
 1. `ICT 2026 Mentorship`
 2. `LECTURE #x`
 3. `Full Mentorship 2026`
+
+## Mapowanie operacyjne (v1)
+
+1. `ICT 2026 Mentorship` -> `label: ICT Full Mentoring 2026`, `series: ICT 2026 Mentorship`
+2. `LECTURE #12` -> `label: ICT Full Mentoring 2026`, `series: ICT 2026 Mentorship`, `module: Lecture #12`

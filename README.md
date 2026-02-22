@@ -6,7 +6,7 @@ na potrzeby analizy merytorycznej tresci tradingowych (ICT i pokrewne zagadnieni
 ## Status
 
 Repo zawiera szkielet projektu:
-- `collect` - pobieranie postow (placeholder)
+- `collect` - pobieranie postow (`placeholder` lub `x-api-recent-search`)
 - `collect` wspiera tryb `all` oraz `filtered` (tagi/frazy)
 - `ocr` - ekstrakcja tekstu z obrazow (placeholder)
 - `classify` - wzbogacanie i klasyfikacja tresci (placeholder)
@@ -20,6 +20,7 @@ python -m venv .venv
 pip install -e .[dev]
 copy .env.example .env
 python -m x_legal_stuff_webscrapper collect --account example_handle
+python -m x_legal_stuff_webscrapper collect --account example_handle --backend x-api-recent-search --mode filtered --tag ICT --query "LECTURE #1"
 python -m x_legal_stuff_webscrapper collect --account example_handle --mode filtered --tag ICT --tag MENTORSHIP --query "ICT 2026 Mentorship" --query "LECTURE #1"
 python -m x_legal_stuff_webscrapper ocr
 python -m x_legal_stuff_webscrapper classify
@@ -31,9 +32,19 @@ python -m x_legal_stuff_webscrapper export
 1. `all` - pobiera publiczne posty z wybranych kont (w zakresie backendu kolektora).
 2. `filtered` - pobiera tylko posty pasujace do wskazanych tagow i/lub fraz.
 
+Backendy `collect`:
+1. `placeholder` - dane testowe do developmentu.
+2. `x-api-recent-search` - oficjalny endpoint X API v2 (`/2/tweets/search/recent`) z filtrowaniem po stronie zrodla.
+
 Przyklady selektywnych filtrów:
 - tagi: `ICT`, `MENTORSHIP`, `LECTURE`
 - frazy: `ICT 2026 Mentorship`, `LECTURE #x`
+
+## Mapowanie selektywnych fraz do taxonomii
+
+Klasyfikator rozszerza klasyfikacje o mapowanie regex:
+- `ICT 2026 Mentorship` -> seria `ICT 2026 Mentorship` / label `ICT Full Mentoring 2026`
+- `LECTURE #x` -> modul `Lecture #x` w serii `ICT 2026 Mentorship`
 
 ## Dokumentacja
 
