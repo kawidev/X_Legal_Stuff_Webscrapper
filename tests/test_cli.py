@@ -47,3 +47,12 @@ def test_cli_collect_supports_download_images_toggle() -> None:
     namespace = parser.parse_args(["collect", "--download-images"])
 
     assert namespace.download_images is True
+
+
+def test_cli_ocr_supports_backend_and_model() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["ocr", "--backend", "openai-vision", "--model", "gpt-4.1-mini"])
+
+    assert namespace.command == "ocr"
+    assert namespace.backend == "openai-vision"
+    assert namespace.model == "gpt-4.1-mini"

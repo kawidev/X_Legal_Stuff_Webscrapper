@@ -11,7 +11,7 @@ from .exporter import export_dataset
 from .llm_enrichment import enrich_posts
 from .media_downloader import download_images_for_posts
 from .storage import append_jsonl, ensure_dir, read_jsonl
-from .vision_ocr import process_posts_for_ocr
+from .vision_ocr import DEFAULT_OCR_PROMPT, process_posts_for_ocr
 
 
 def _configure_logging(level: str) -> None:
@@ -80,13 +80,27 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
     return 0
 
 
-def cmd_ocr(_: argparse.Namespace, config: AppConfig) -> int:
+def cmd_ocr(args: argparse.Namespace, config: AppConfig) -> int:
     logger = logging.getLogger("ocr")
     paths = _paths(config.data_dir)
     posts = read_jsonl(paths["processed_posts"])
-    results = process_posts_for_ocr(posts)
+    backend = args.backend
+    if backend == "auto":
+        backend = "openai-vision" if config.openai_api_key else "placeholder"
+    try:
+        results = process_posts_for_ocr(
+            posts,
+            data_dir=config.data_dir,
+            backend=backend,
+            openai_api_key=config.openai_api_key,
+            openai_model=args.model or config.openai_ocr_model,
+            openai_prompt=args.prompt or DEFAULT_OCR_PROMPT,
+        )
+    except Exception as exc:
+        logger.error("OCR failed: %s", exc)
+        return 1
     append_jsonl(paths["ocr"], results)
-    logger.info("Generated %s OCR placeholder records", len(results))
+    logger.info("Generated %s OCR records (backend=%s)", len(results), backend)
     return 0
 
 
@@ -150,7 +164,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Download image assets and store deduplicated files under data/raw/images",
     )
 
-    subparsers.add_parser("ocr", help="Run OCR pipeline for collected images")
+    ocr = subparsers.add_parser("ocr", help="Run OCR pipeline for collected images")
+    ocr.add_argument(
+        "--backend",
+        choices=["auto", "placeholder", "openai-vision"],
+        default="auto",
+        help="OCR backend",
+    )
+    ocr.add_argument("--model", help="Override OpenAI OCR model")
+    ocr.add_argument("--prompt", help="Override OCR extraction prompt")
     subparsers.add_parser("classify", help="Run enrichment and classification")
     subparsers.add_parser("export", help="Export normalized dataset")
     return parser
