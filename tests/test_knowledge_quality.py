@@ -69,6 +69,14 @@ def test_validator_detects_partial_without_missing_data_warning() -> None:
     assert validation["metrics"]["broken_refs_count"] == 0
 
 
+def test_term_status_fallback_prefers_uncertain_when_definition_present() -> None:
+    rec = _sample_record_with_aliases()
+    term = rec["knowledge_extract"]["terms_detected"][0]
+    term.pop("interpretation_status", None)
+    result = canonicalize_knowledge_record(rec)["canonical_record"]
+    assert result["knowledge_extract"]["terms_detected"][0]["status"] == "uncertain"
+
+
 def test_run_quality_gates_reports_broken_refs() -> None:
     rec = _sample_record_with_aliases()
     rec["knowledge_extract"]["relations_candidate"][0]["evidence_refs"] = ["missing:ref"]

@@ -37,6 +37,20 @@ def _normalize_term(value: str) -> str:
     return text.replace("&amp;", "&")
 
 
+def _infer_term_status_fallback(item: dict) -> str:
+    evidence_refs = item.get("evidence_refs") if isinstance(item.get("evidence_refs"), list) else []
+    has_direct_evidence_ref = any(
+        isinstance(ref, str) and (ref.startswith("post:") or ref.startswith("ocr:")) for ref in evidence_refs
+    )
+    has_interpretive_payload = any(
+        isinstance(item.get(key), str) and item.get(key).strip()
+        for key in ["definition", "definition_text", "description", "heuristic", "warning"]
+    )
+    if has_direct_evidence_ref and not has_interpretive_payload:
+        return "observed"
+    return "uncertain"
+
+
 def _slugify(value: str) -> str:
     out = re.sub(r"[^a-zA-Z0-9]+", "_", (value or "").strip().lower()).strip("_")
     return out[:80] or "unknown"
@@ -142,8 +156,9 @@ def _canon_terms_and_defs(c: dict, actions: list[dict]) -> None:
             item["confidence"] = None
             _action(actions, "fallback_fill", p, "confidence=null")
         if not item.get("status"):
-            item["status"] = "observed"
-            _action(actions, "fallback_fill", p, "status=observed")
+            inferred_status = _infer_term_status_fallback(item)
+            item["status"] = inferred_status
+            _action(actions, "fallback_fill", p, f"status={inferred_status}")
         if "evidence_refs" not in item:
             item["evidence_refs"] = []
             _action(actions, "fallback_fill", p, "evidence_refs=[]")
