@@ -24,11 +24,14 @@ Zbudowac pipeline do:
 3. `llm_enrichment`
    - normalizacja tresci
    - ekstrakcja pojec
+4. `knowledge_extractor`
+   - JSON AI-ready pod kuracje semantyczna i przyszly Contextor
+   - provenance / observed vs inferred vs uncertain
 4. `classifier`
    - klasyfikacja regulowa + (pozniej) LLM/ML
-5. `storage`
+6. `storage`
    - JSONL/SQLite (MVP)
-6. `exporter`
+7. `exporter`
    - eksport danych do datasetow
 
 ## Etapy realizacji

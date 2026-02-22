@@ -10,6 +10,7 @@ Repo zawiera szkielet projektu:
 - `collect` wspiera tryb `all` oraz `filtered` (tagi/frazy)
 - `collect --download-images` - pobieranie obrazow z deduplikacja (SHA256)
 - `ocr` - ekstrakcja tekstu z obrazow (`placeholder` lub `openai-vision`)
+- `extract-knowledge` - semantyczna ekstrakcja wiedzy do JSON AI-ready (OpenAI / placeholder)
 - `classify` - wzbogacanie i klasyfikacja tresci (placeholder)
 - `export` - eksport prostego datasetu JSONL
 
@@ -24,6 +25,7 @@ python -m x_legal_stuff_webscrapper collect --account example_handle
 python -m x_legal_stuff_webscrapper collect --account example_handle --backend x-api-recent-search --mode filtered --tag ICT --query "LECTURE #1" --download-images
 python -m x_legal_stuff_webscrapper collect --account example_handle --mode filtered --tag ICT --tag MENTORSHIP --query "ICT 2026 Mentorship" --query "LECTURE #1"
 python -m x_legal_stuff_webscrapper ocr --backend openai-vision --model gpt-4.1-mini
+python -m x_legal_stuff_webscrapper extract-knowledge --backend openai --model gpt-4.1-mini --max-posts 1
 python -m x_legal_stuff_webscrapper classify
 python -m x_legal_stuff_webscrapper export
 ```
@@ -84,6 +86,25 @@ Klasyfikator rozszerza klasyfikacje o mapowanie regex:
 - backend `ocr --backend openai-vision` korzysta z `OPENAI_API_KEY`
 - domyslny model konfigurowalny przez `OPENAI_OCR_MODEL`
 - OCR pracuje na lokalnych plikach pobranych przez `--download-images`
+
+## Ekstrakcja wiedzy (AI-ready JSON)
+
+- komenda: `extract-knowledge`
+- wejscie: `processed/posts.jsonl` + `processed/ocr_results.jsonl`
+- wyjscie: `processed/knowledge_extract.jsonl`
+- backend `openai` generuje strukture JSON pod dalsza kuracje i klasyfikacje:
+  - `knowledge_extract`
+  - `trading_context_extract`
+  - `contextor_mapping_candidates`
+  - `quality_control`
+  - `provenance_index`
+
+Przyklad (probka 1 post):
+
+```powershell
+$env:DATA_DIR=".\\data\\drevax_ocr_sample_3"
+python x_scrapper.py extract-knowledge --backend openai --model gpt-4.1-mini --max-posts 1
+```
 
 ## Dokumentacja
 
