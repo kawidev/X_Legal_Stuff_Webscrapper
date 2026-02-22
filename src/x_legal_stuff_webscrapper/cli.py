@@ -9,6 +9,7 @@ from .collector_x import collect_public_posts
 from .config import AppConfig
 from .exporter import export_dataset
 from .llm_enrichment import enrich_posts
+from .media_downloader import download_images_for_posts
 from .storage import append_jsonl, ensure_dir, read_jsonl
 from .vision_ocr import process_posts_for_ocr
 
@@ -23,6 +24,7 @@ def _configure_logging(level: str) -> None:
 def _paths(data_dir: Path) -> dict[str, Path]:
     return {
         "raw_posts": data_dir / "raw" / "posts.jsonl",
+        "image_manifest": data_dir / "index" / "images_manifest.jsonl",
         "ocr": data_dir / "processed" / "ocr_results.jsonl",
         "enrich": data_dir / "processed" / "llm_results.jsonl",
         "processed_posts": data_dir / "processed" / "posts.jsonl",
@@ -57,6 +59,11 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
     except Exception as exc:
         logger.error("Collect failed: %s", exc)
         return 1
+
+    if args.download_images:
+        posts, image_manifest = download_images_for_posts(posts, data_dir=config.data_dir)
+        append_jsonl(paths["image_manifest"], image_manifest)
+        logger.info("Downloaded/processed %s images", len(image_manifest))
 
     append_jsonl(paths["raw_posts"], posts)
     append_jsonl(paths["processed_posts"], posts)
@@ -135,6 +142,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["any", "all"],
         default="any",
         help="How multiple tag/query filters are combined",
+    )
+    collect.add_argument(
+        "--download-images",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Download image assets and store deduplicated files under data/raw/images",
     )
 
     subparsers.add_parser("ocr", help="Run OCR pipeline for collected images")
