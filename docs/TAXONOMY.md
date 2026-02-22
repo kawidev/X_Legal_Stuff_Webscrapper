@@ -18,3 +18,10 @@
 1. `intent`: `education`, `promotion`, `analysis`, `results`, `mixed`
 2. `quality_score`: skala robocza do recznej oceny
 3. `review_status`: `pending`, `approved`, `rejected`, `needs_split`
+4. `selection_rule`: zapis reguly selektywnego pobrania (np. `tags:[ICT,MENTORSHIP]`, `query:\"LECTURE #1\"`)
+
+## Przyklady fraz selektywnych (operacyjne)
+
+1. `ICT 2026 Mentorship`
+2. `LECTURE #x`
+3. `Full Mentorship 2026`

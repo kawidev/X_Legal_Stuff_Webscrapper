@@ -12,8 +12,10 @@ Przetwarzanie publicznie dostepnych tresci z X w celu:
 Zbierane pola (MVP):
 - `post_id`, `author_handle`, `published_at`, `url`
 - tekst posta
+- `hashtags` / etykiety wykryte lub pobrane z posta (jezeli dostepne)
 - obrazy powiazane z postem (lub ich referencje)
 - metadane przetwarzania (`scraped_at`, `processed_at`)
+- kontekst pobrania (`filter_context`: tryb `all`/`filtered`, tagi/frazy)
 
 Nie zbieramy danych prywatnych ani nieautoryzowanych.
 

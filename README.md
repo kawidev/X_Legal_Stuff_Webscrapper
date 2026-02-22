@@ -7,6 +7,7 @@ na potrzeby analizy merytorycznej tresci tradingowych (ICT i pokrewne zagadnieni
 
 Repo zawiera szkielet projektu:
 - `collect` - pobieranie postow (placeholder)
+- `collect` wspiera tryb `all` oraz `filtered` (tagi/frazy)
 - `ocr` - ekstrakcja tekstu z obrazow (placeholder)
 - `classify` - wzbogacanie i klasyfikacja tresci (placeholder)
 - `export` - eksport prostego datasetu JSONL
@@ -19,10 +20,20 @@ python -m venv .venv
 pip install -e .[dev]
 copy .env.example .env
 python -m x_legal_stuff_webscrapper collect --account example_handle
+python -m x_legal_stuff_webscrapper collect --account example_handle --mode filtered --tag ICT --tag MENTORSHIP --query "ICT 2026 Mentorship" --query "LECTURE #1"
 python -m x_legal_stuff_webscrapper ocr
 python -m x_legal_stuff_webscrapper classify
 python -m x_legal_stuff_webscrapper export
 ```
+
+## Tryby pobierania
+
+1. `all` - pobiera publiczne posty z wybranych kont (w zakresie backendu kolektora).
+2. `filtered` - pobiera tylko posty pasujace do wskazanych tagow i/lub fraz.
+
+Przyklady selektywnych filtrów:
+- tagi: `ICT`, `MENTORSHIP`, `LECTURE`
+- frazy: `ICT 2026 Mentorship`, `LECTURE #x`
 
 ## Dokumentacja
 

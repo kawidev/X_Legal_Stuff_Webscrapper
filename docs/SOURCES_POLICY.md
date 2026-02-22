@@ -11,6 +11,8 @@
 1. Lista kont zrodlowych jest jawnie utrzymywana w konfiguracji projektu.
 2. Zmiany listy kont sa dokumentowane (kto/co/kiedy/dlaczego).
 3. Nie pobieramy tresci z kont prywatnych ani z ograniczonym dostepem.
+4. Dopuszczalne sa dwa tryby zbierania: calosciowy i selektywny (tagi/frazy), zalezne od celu sesji.
+5. Dla sesji selektywnych nalezy zapisac zastosowane filtry (np. `ICT`, `MENTORSHIP`, `LECTURE #x`).
 
 ## Lista startowa
 
