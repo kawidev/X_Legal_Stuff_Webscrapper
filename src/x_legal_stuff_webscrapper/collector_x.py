@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 from datetime import UTC, datetime
 from typing import Literal
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 X_API_BASE_URL = "https://api.x.com/2"
+LOGGER = logging.getLogger("collector_x")
 
 CollectBackend = Literal[
     "placeholder",
@@ -102,6 +106,7 @@ def build_x_search_query(
 
 
 def _http_get_json(url: str, *, bearer_token: str, timeout_seconds: int = 30) -> dict:
+    max_attempts = 4
     req = Request(
         url,
         headers={
@@ -111,8 +116,59 @@ def _http_get_json(url: str, *, bearer_token: str, timeout_seconds: int = 30) ->
         },
         method="GET",
     )
-    with urlopen(req, timeout=timeout_seconds) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(1, max_attempts + 1):
+        try:
+            with urlopen(req, timeout=timeout_seconds) as response:
+                headers = response.headers
+                LOGGER.info(
+                    "X API response %s (limit=%s remaining=%s reset=%s)",
+                    response.status,
+                    headers.get("x-rate-limit-limit"),
+                    headers.get("x-rate-limit-remaining"),
+                    headers.get("x-rate-limit-reset"),
+                )
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            headers = exc.headers or {}
+            body = ""
+            try:
+                body = exc.read().decode("utf-8", errors="replace")
+            except Exception:
+                body = ""
+
+            LOGGER.warning(
+                "X API HTTPError %s on attempt %s/%s (limit=%s remaining=%s reset=%s) url=%s",
+                exc.code,
+                attempt,
+                max_attempts,
+                headers.get("x-rate-limit-limit"),
+                headers.get("x-rate-limit-remaining"),
+                headers.get("x-rate-limit-reset"),
+                url.split("?")[0],
+            )
+
+            retryable = exc.code == 429 or 500 <= exc.code < 600
+            if not retryable or attempt == max_attempts:
+                raise RuntimeError(
+                    f"X API request failed with HTTP {exc.code}. "
+                    f"Body preview: {body[:300]}"
+                ) from exc
+
+            reset_value = headers.get("x-rate-limit-reset")
+            sleep_seconds = min(2 ** (attempt - 1), 30)
+            if reset_value and str(reset_value).isdigit():
+                reset_epoch = int(str(reset_value))
+                wait_until_reset = max(0, reset_epoch - int(time.time()))
+                if wait_until_reset > 0:
+                    sleep_seconds = min(wait_until_reset + 1, 60)
+            time.sleep(sleep_seconds)
+        except URLError as exc:
+            LOGGER.warning("X API URLError on attempt %s/%s: %s", attempt, max_attempts, exc)
+            if attempt == max_attempts:
+                raise RuntimeError(f"X API network request failed: {exc}") from exc
+            time.sleep(min(2 ** (attempt - 1), 15))
+
+    raise RuntimeError("Unreachable X API request state")
 
 
 def _extract_hashtags(tweet: dict) -> list[str]:

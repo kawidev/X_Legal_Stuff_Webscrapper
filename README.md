@@ -6,7 +6,7 @@ na potrzeby analizy merytorycznej tresci tradingowych (ICT i pokrewne zagadnieni
 ## Status
 
 Repo zawiera szkielet projektu:
-- `collect` - pobieranie postow (`placeholder` lub `x-api-recent-search`)
+- `collect` - pobieranie postow (`recent`, `timeline`, `all`, `placeholder`)
 - `collect` wspiera tryb `all` oraz `filtered` (tagi/frazy)
 - `collect --download-images` - pobieranie obrazow z deduplikacja (SHA256)
 - `ocr` - ekstrakcja tekstu z obrazow (`placeholder` lub `openai-vision`)
@@ -35,7 +35,31 @@ python -m x_legal_stuff_webscrapper export
 
 Backendy `collect`:
 1. `placeholder` - dane testowe do developmentu.
-2. `x-api-recent-search` - oficjalny endpoint X API v2 (`/2/tweets/search/recent`) z filtrowaniem po stronie zrodla.
+2. `recent` / `x-api-recent-search` - X API v2 `search/recent` (okno recent, dobre do selektywnego search).
+3. `timeline` / `x-api-user-timeline` - X API v2 user timeline (`/users/{id}/tweets`), lepsze do backfillu profilu.
+4. `all` / `x-api-search-all` - X API v2 full archive search (`search/all`), jesli plan X to udostepnia.
+
+### Backend Matrix (praktycznie)
+
+| Backend | Endpoint X API | Kiedy uzywac | Ograniczenie glówne |
+|---|---|---|---|
+| `recent` | `/2/tweets/search/recent` | szybki selektywny search po frazach/tagach | recent window (ostatnie dni) |
+| `timeline` | `/2/users/{id}/tweets` | pobieranie postów konkretnego profilu | do ok. 3200 najnowszych postów |
+| `all` | `/2/tweets/search/all` | historyczny backfill + precyzyjne query | wymaga odpowiedniego planu/kredytów |
+
+### Content Mode (typ tresci)
+
+- `with-images` - tylko posty z obrazami
+- `only-text` - tylko posty bez obrazow
+- `mixed` - wszystko (domyslnie)
+
+Przyklady:
+
+```powershell
+python x_scrapper.py collect --account Drevaxtrades --backend timeline --mode all --content-mode mixed
+python x_scrapper.py collect --account Drevaxtrades --backend recent --mode filtered --query "Masterclass" --content-mode with-images
+python x_scrapper.py collect --account Drevaxtrades --backend all --mode all --content-mode only-text
+```
 
 ## Pobieranie obrazow i deduplikacja
 
@@ -43,6 +67,7 @@ Backendy `collect`:
 - pliki sa zapisywane do `data/raw/images/by_sha256/`
 - deduplikacja odbywa sie po `SHA256`
 - manifest pobran zapisuje sie do `data/index/images_manifest.jsonl`
+- requesty X API maja retry/backoff i logowanie rate-limit headers (`x-rate-limit-*`)
 
 Przyklady selektywnych filtrów:
 - tagi: `ICT`, `MENTORSHIP`, `LECTURE`
