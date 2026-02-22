@@ -8,3 +8,25 @@ def test_cli_has_expected_subcommands() -> None:
     assert namespace.command == "collect"
     assert namespace.accounts == ["example"]
     assert namespace.limit == 2
+
+
+def test_cli_collect_supports_filter_args() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(
+        [
+            "collect",
+            "--mode",
+            "filtered",
+            "--tag",
+            "ICT",
+            "--query",
+            "ICT 2026 Mentorship",
+            "--match-mode",
+            "all",
+        ]
+    )
+
+    assert namespace.mode == "filtered"
+    assert namespace.tags == ["ICT"]
+    assert namespace.queries == ["ICT 2026 Mentorship"]
+    assert namespace.match_mode == "all"

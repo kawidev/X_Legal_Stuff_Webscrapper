@@ -39,10 +39,27 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
         logger.error("No source accounts provided. Use --account or X_SOURCE_ACCOUNTS.")
         return 2
 
-    posts = collect_public_posts(handles=handles, limit_per_account=args.limit)
+    tag_filters = args.tags or config.x_filter_tags
+    text_filters = args.queries or config.x_filter_keywords
+    use_filters = args.mode == "filtered" or bool(tag_filters or text_filters)
+    posts = collect_public_posts(
+        handles=handles,
+        limit_per_account=args.limit,
+        tag_filters=tag_filters if use_filters else None,
+        text_filters=text_filters if use_filters else None,
+        match_mode=args.match_mode,
+    )
     append_jsonl(paths["raw_posts"], posts)
     append_jsonl(paths["processed_posts"], posts)
-    logger.info("Collected %s posts from %s accounts", len(posts), len(handles))
+    logger.info(
+        "Collected %s posts from %s accounts (mode=%s, tags=%s, queries=%s, match=%s)",
+        len(posts),
+        len(handles),
+        "filtered" if use_filters else "all",
+        tag_filters if use_filters else [],
+        text_filters if use_filters else [],
+        args.match_mode,
+    )
     return 0
 
 
@@ -84,6 +101,25 @@ def build_parser() -> argparse.ArgumentParser:
     collect = subparsers.add_parser("collect", help="Collect public posts from configured X accounts")
     collect.add_argument("--account", dest="accounts", action="append", help="Source account handle (repeatable)")
     collect.add_argument("--limit", type=int, default=5, help="Max posts per account (placeholder collector)")
+    collect.add_argument(
+        "--mode",
+        choices=["all", "filtered"],
+        default="all",
+        help="Collect all public posts or only posts matching tags/queries",
+    )
+    collect.add_argument("--tag", dest="tags", action="append", help="Tag filter, e.g. ICT or MENTORSHIP")
+    collect.add_argument(
+        "--query",
+        dest="queries",
+        action="append",
+        help="Text phrase filter, e.g. 'ICT 2026 Mentorship' or 'LECTURE #1'",
+    )
+    collect.add_argument(
+        "--match-mode",
+        choices=["any", "all"],
+        default="any",
+        help="How multiple tag/query filters are combined",
+    )
 
     subparsers.add_parser("ocr", help="Run OCR pipeline for collected images")
     subparsers.add_parser("classify", help="Run enrichment and classification")
