@@ -13,6 +13,7 @@ def _split_csv(value: str) -> list[str]:
 class AppConfig:
     openai_api_key: str | None
     openai_ocr_model: str
+    openai_knowledge_model: str
     x_api_bearer_token: str | None
     x_source_accounts: list[str]
     x_collect_backend: str
@@ -27,6 +28,7 @@ class AppConfig:
         return cls(
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             openai_ocr_model=os.getenv("OPENAI_OCR_MODEL", "gpt-4.1-mini"),
+            openai_knowledge_model=os.getenv("OPENAI_KNOWLEDGE_MODEL", "gpt-4.1-mini"),
             x_api_bearer_token=os.getenv("X_API_BEARER_TOKEN"),
             x_source_accounts=_split_csv(os.getenv("X_SOURCE_ACCOUNTS", "")),
             x_collect_backend=os.getenv("X_COLLECT_BACKEND", "auto"),

@@ -65,3 +65,15 @@ def test_cli_ocr_supports_backend_and_model() -> None:
     assert namespace.command == "ocr"
     assert namespace.backend == "openai-vision"
     assert namespace.model == "gpt-4.1-mini"
+
+
+def test_cli_extract_knowledge_supports_backend_and_limit() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(
+        ["extract-knowledge", "--backend", "openai", "--model", "gpt-4.1-mini", "--max-posts", "2"]
+    )
+
+    assert namespace.command == "extract-knowledge"
+    assert namespace.backend == "openai"
+    assert namespace.model == "gpt-4.1-mini"
+    assert namespace.max_posts == 2

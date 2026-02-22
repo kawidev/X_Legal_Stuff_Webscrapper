@@ -8,6 +8,7 @@ from .classifier import classify_posts
 from .collector_x import collect_public_posts
 from .config import AppConfig
 from .exporter import export_dataset
+from .knowledge_extractor import extract_knowledge_records
 from .llm_enrichment import enrich_posts
 from .media_downloader import download_images_for_posts
 from .storage import append_jsonl, ensure_dir, read_jsonl
@@ -26,6 +27,7 @@ def _paths(data_dir: Path) -> dict[str, Path]:
         "raw_posts": data_dir / "raw" / "posts.jsonl",
         "image_manifest": data_dir / "index" / "images_manifest.jsonl",
         "ocr": data_dir / "processed" / "ocr_results.jsonl",
+        "knowledge": data_dir / "processed" / "knowledge_extract.jsonl",
         "enrich": data_dir / "processed" / "llm_results.jsonl",
         "processed_posts": data_dir / "processed" / "posts.jsonl",
         "classifications": data_dir / "processed" / "classifications.jsonl",
@@ -119,6 +121,31 @@ def cmd_classify(_: argparse.Namespace, config: AppConfig) -> int:
     return 0
 
 
+def cmd_extract_knowledge(args: argparse.Namespace, config: AppConfig) -> int:
+    logger = logging.getLogger("extract_knowledge")
+    paths = _paths(config.data_dir)
+    posts = read_jsonl(paths["processed_posts"])
+    ocr = read_jsonl(paths["ocr"])
+    backend = args.backend
+    if backend == "auto":
+        backend = "openai" if config.openai_api_key else "placeholder"
+    try:
+        records = extract_knowledge_records(
+            posts,
+            ocr,
+            backend=backend,
+            openai_api_key=config.openai_api_key,
+            model=args.model or config.openai_knowledge_model,
+            max_posts=args.max_posts,
+        )
+    except Exception as exc:
+        logger.error("Knowledge extraction failed: %s", exc)
+        return 1
+    append_jsonl(paths["knowledge"], records)
+    logger.info("Generated %s knowledge extraction records (backend=%s)", len(records), backend)
+    return 0
+
+
 def cmd_export(_: argparse.Namespace, config: AppConfig) -> int:
     logger = logging.getLogger("export")
     paths = _paths(config.data_dir)
@@ -190,6 +217,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ocr.add_argument("--model", help="Override OpenAI OCR model")
     ocr.add_argument("--prompt", help="Override OCR extraction prompt")
+    extract = subparsers.add_parser("extract-knowledge", help="Generate AI-ready semantic knowledge JSON from post+OCR")
+    extract.add_argument(
+        "--backend",
+        choices=["auto", "placeholder", "openai"],
+        default="auto",
+        help="Knowledge extraction backend",
+    )
+    extract.add_argument("--model", help="Override OpenAI knowledge extraction model")
+    extract.add_argument("--max-posts", type=int, help="Limit number of posts processed in this run")
     subparsers.add_parser("classify", help="Run enrichment and classification")
     subparsers.add_parser("export", help="Export normalized dataset")
     return parser
@@ -205,6 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "collect": cmd_collect,
         "ocr": cmd_ocr,
+        "extract-knowledge": cmd_extract_knowledge,
         "classify": cmd_classify,
         "export": cmd_export,
     }
