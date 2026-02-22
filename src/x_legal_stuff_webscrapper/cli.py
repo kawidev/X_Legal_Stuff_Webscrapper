@@ -9,9 +9,10 @@ from .collector_x import collect_public_posts
 from .config import AppConfig
 from .exporter import export_dataset
 from .knowledge_extractor import extract_knowledge_records
+from .knowledge_quality import run_quality_gates_for_knowledge_records
 from .llm_enrichment import enrich_posts
 from .media_downloader import download_images_for_posts
-from .storage import append_jsonl, ensure_dir, read_jsonl
+from .storage import append_jsonl, ensure_dir, read_jsonl, write_json, write_jsonl
 from .vision_ocr import DEFAULT_OCR_PROMPT, process_posts_for_ocr
 
 
@@ -28,6 +29,9 @@ def _paths(data_dir: Path) -> dict[str, Path]:
         "image_manifest": data_dir / "index" / "images_manifest.jsonl",
         "ocr": data_dir / "processed" / "ocr_results.jsonl",
         "knowledge": data_dir / "processed" / "knowledge_extract.jsonl",
+        "knowledge_canonical": data_dir / "processed" / "knowledge_extract_canonical.jsonl",
+        "knowledge_quality_records": data_dir / "processed" / "knowledge_quality_records.jsonl",
+        "knowledge_qa_report": data_dir / "processed" / "knowledge_qa_report.json",
         "enrich": data_dir / "processed" / "llm_results.jsonl",
         "processed_posts": data_dir / "processed" / "posts.jsonl",
         "classifications": data_dir / "processed" / "classifications.jsonl",
@@ -146,6 +150,30 @@ def cmd_extract_knowledge(args: argparse.Namespace, config: AppConfig) -> int:
     return 0
 
 
+def cmd_qa_knowledge(args: argparse.Namespace, config: AppConfig) -> int:
+    logger = logging.getLogger("qa_knowledge")
+    paths = _paths(config.data_dir)
+    input_path = Path(args.input) if args.input else paths["knowledge"]
+    records = read_jsonl(input_path)
+    if args.max_records is not None:
+        records = records[: args.max_records]
+    result = run_quality_gates_for_knowledge_records(records)
+
+    if not args.no_write:
+        write_jsonl(paths["knowledge_canonical"], result["canonical_records"])
+        write_jsonl(paths["knowledge_quality_records"], result["record_reports"])
+        write_json(paths["knowledge_qa_report"], result["qa_report"])
+
+    logger.info(
+        "QA knowledge processed %s records (errors=%s warnings=%s, broken_refs=%s)",
+        result["qa_report"]["record_count"],
+        result["qa_report"]["quality_gate_metrics"]["error_count_total"],
+        result["qa_report"]["quality_gate_metrics"]["warning_count_total"],
+        result["qa_report"]["quality_gate_metrics"]["broken_refs_count"],
+    )
+    return 0
+
+
 def cmd_export(_: argparse.Namespace, config: AppConfig) -> int:
     logger = logging.getLogger("export")
     paths = _paths(config.data_dir)
@@ -226,6 +254,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     extract.add_argument("--model", help="Override OpenAI knowledge extraction model")
     extract.add_argument("--max-posts", type=int, help="Limit number of posts processed in this run")
+    qa = subparsers.add_parser("qa-knowledge", help="Canonicalize and validate knowledge_extract records + QA report")
+    qa.add_argument("--input", help="Optional path to knowledge_extract.jsonl (default: DATA_DIR processed file)")
+    qa.add_argument("--max-records", type=int, help="Limit number of records")
+    qa.add_argument("--no-write", action="store_true", help="Run checks without writing output artifacts")
     subparsers.add_parser("classify", help="Run enrichment and classification")
     subparsers.add_parser("export", help="Export normalized dataset")
     return parser
@@ -242,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
         "collect": cmd_collect,
         "ocr": cmd_ocr,
         "extract-knowledge": cmd_extract_knowledge,
+        "qa-knowledge": cmd_qa_knowledge,
         "classify": cmd_classify,
         "export": cmd_export,
     }

@@ -20,6 +20,16 @@ def append_jsonl(path: Path, rows: Iterable[dict]) -> int:
     return count
 
 
+def write_jsonl(path: Path, rows: Iterable[dict]) -> int:
+    ensure_dir(path.parent)
+    count = 0
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
+            count += 1
+    return count
+
+
 def read_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
@@ -30,3 +40,10 @@ def read_jsonl(path: Path) -> list[dict]:
             if line:
                 rows.append(json.loads(line))
     return rows
+
+
+def write_json(path: Path, payload: dict | list) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, ensure_ascii=False, indent=2)
+        handle.write("\n")

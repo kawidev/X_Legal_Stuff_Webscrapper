@@ -77,3 +77,13 @@ def test_cli_extract_knowledge_supports_backend_and_limit() -> None:
     assert namespace.backend == "openai"
     assert namespace.model == "gpt-4.1-mini"
     assert namespace.max_posts == 2
+
+
+def test_cli_qa_knowledge_supports_input_and_no_write() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["qa-knowledge", "--input", "sample.jsonl", "--max-records", "5", "--no-write"])
+
+    assert namespace.command == "qa-knowledge"
+    assert namespace.input == "sample.jsonl"
+    assert namespace.max_records == 5
+    assert namespace.no_write is True
