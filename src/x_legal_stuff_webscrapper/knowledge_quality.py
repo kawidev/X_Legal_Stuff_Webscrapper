@@ -22,6 +22,11 @@ TRADING_CONTEXT_KEYS = [
     "outcome_elements",
 ]
 HEDGING_RE = re.compile(r"\b(likely|presumably|may|could|appears|implies|suggests)\b", re.IGNORECASE)
+ITEM_PATH_RE = re.compile(
+    r"^(knowledge_extract\.(?:terms_detected|definitions_candidate|relations_candidate|variants_candidate)\[\d+\]"
+    r"|contextor_mapping_candidates\.(?:potential_events|potential_questions|potential_play_candidates)\[\d+\]"
+    r"|trading_context_extract\.[a-z_]+\[\d+\])"
+)
 
 
 def _ensure_list(value: Any) -> list:
@@ -64,6 +69,61 @@ def _action(actions: list[dict], action: str, path: str, detail: str | None = No
     if detail:
         row["detail"] = detail
     actions.append(row)
+
+
+def _split_path(path: str) -> list[str | int]:
+    parts: list[str | int] = []
+    for seg in path.split("."):
+        while "[" in seg:
+            name, rest = seg.split("[", 1)
+            if name:
+                parts.append(name)
+            idx_str, seg = rest.split("]", 1)
+            parts.append(int(idx_str))
+        if seg:
+            parts.append(seg)
+    return parts
+
+
+def _resolve_path(obj: Any, path: str) -> Any:
+    cur = obj
+    for token in _split_path(path):
+        if isinstance(token, int):
+            if not isinstance(cur, list) or token >= len(cur):
+                return None
+            cur = cur[token]
+        else:
+            if not isinstance(cur, dict) or token not in cur:
+                return None
+            cur = cur[token]
+    return cur
+
+
+def _annotate_canonicalization_items(canonical: dict, actions: list[dict]) -> list[dict]:
+    grouped: dict[str, list[str]] = {}
+    for a in actions:
+        raw_path = str(a.get("path") or "")
+        m = ITEM_PATH_RE.match(raw_path)
+        if not m:
+            continue
+        item_path = m.group(1)
+        note = a["action"]
+        if a.get("detail"):
+            note = f"{note}:{a['detail']}"
+        elif raw_path != item_path:
+            suffix = raw_path[len(item_path) :].lstrip(".")
+            if suffix:
+                note = f"{note}:{suffix}"
+        grouped.setdefault(item_path, []).append(note)
+
+    trace = []
+    for item_path, notes in grouped.items():
+        item = _resolve_path(canonical, item_path)
+        if isinstance(item, dict):
+            item["_canonicalized"] = True
+            item["_canonicalization_notes"] = notes
+        trace.append({"item_path": item_path, "notes": notes, "action_count": len(notes)})
+    return trace
 
 
 def _pre_stats(record: dict) -> dict:
@@ -379,7 +439,8 @@ def canonicalize_knowledge_record(record: dict) -> dict:
             _action(actions, "fallback_fill", p, "ref_id")
         prov.append(item)
     canonical["provenance_index"] = prov
-    return {"canonical_record": canonical, "canonicalization_actions": actions, "pre_stats": pre}
+    trace = _annotate_canonicalization_items(canonical, actions)
+    return {"canonical_record": canonical, "canonicalization_actions": actions, "canonicalization_trace": trace, "pre_stats": pre}
 
 
 def _iter_items(record: dict) -> list[dict]:
@@ -507,6 +568,7 @@ def validate_canonical_knowledge_record(record: dict) -> dict:
 def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
     canonical_records = []
     record_reports = []
+    trace_rows = []
     action_counts: Counter[str] = Counter()
     action_detail_counts: Counter[str] = Counter()
     status_counts: Counter[str] = Counter()
@@ -565,8 +627,19 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
                 "record_index": idx,
                 "post_id": str(post_id),
                 "job_status": str(_ensure_dict(c.get("job_meta")).get("status") or "unknown"),
-                "canonicalization": {"actions": actions, "pre_stats": pre},
+                "canonicalization": {
+                    "actions": actions,
+                    "trace": canon.get("canonicalization_trace", []),
+                    "pre_stats": pre,
+                },
                 "validation": v,
+            }
+        )
+        trace_rows.append(
+            {
+                "record_index": idx,
+                "post_id": str(post_id),
+                "trace": canon.get("canonicalization_trace", []),
             }
         )
         canonical_records.append(c)
@@ -590,4 +663,4 @@ def run_quality_gates_for_knowledge_records(records: list[dict]) -> dict:
             "provenance_warnings_count": int(warning_category_counts.get("provenance", 0)),
         },
     }
-    return {"canonical_records": canonical_records, "record_reports": record_reports, "qa_report": qa_report}
+    return {"canonical_records": canonical_records, "record_reports": record_reports, "qa_report": qa_report, "canonicalization_trace_rows": trace_rows}

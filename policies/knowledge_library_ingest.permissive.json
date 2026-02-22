@@ -1,0 +1,26 @@
+{
+  "version": "knowledge-library-ingest.permissive.v1",
+  "profile_intent": "Exploration/research mode: broad intake, still protects lineage and basic structural integrity.",
+  "heuristics": [
+    "Most semantic warnings are allowed through to manual curation.",
+    "Run-level thresholds relaxed except broken refs and major evidence collapse."
+  ],
+  "blocking_warning_codes": [
+    "missing_status_after_canonicalization"
+  ],
+  "run_thresholds": {
+    "min_evidence_resolution_rate": 0.95,
+    "min_semantic_items_with_evidence_rate": 0.9,
+    "max_broken_refs_count": 0,
+    "min_provenance_utilization_rate": 0.0
+  },
+  "record_thresholds": {
+    "max_warning_categories": {},
+    "max_missing_status_count": 1,
+    "max_observed_hedging_warnings_count": 5,
+    "min_provenance_utilization_rate": 0.0
+  },
+  "job_status_rules": {
+    "allow_partial": true
+  }
+}

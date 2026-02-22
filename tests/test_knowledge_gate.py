@@ -46,6 +46,27 @@ def test_record_gate_blocks_on_schema_contract_errors() -> None:
     assert decision["blocking_error_count"] == 1
 
 
+def test_record_gate_can_block_partial_by_policy() -> None:
+    report = _record_report(idx=0)
+    report["job_status"] = "partial"
+    policy = default_export_gate_policy()
+    policy["job_status_rules"]["allow_partial"] = False
+    policy["blocking_warning_codes"] = list(policy["blocking_warning_codes"]) + ["partial_record_disallowed"]
+    decision = evaluate_record_export_gate(report, policy=policy)
+    assert decision["passed"] is False
+    assert any(w["code"] == "partial_record_disallowed" for w in decision["warnings"])
+
+
+def test_record_gate_threshold_generates_blocking_semantic_warning() -> None:
+    report = _record_report(warnings=[{"code": "observed_hedging_language", "path": "x", "message": "hedge"}], idx=0)
+    policy = default_export_gate_policy()
+    policy["record_thresholds"]["max_warning_categories"] = {"semantic": 0}
+    policy["blocking_warning_codes"] = list(policy["blocking_warning_codes"]) + ["semantic_warnings_above_threshold"]
+    decision = evaluate_record_export_gate(report, policy=policy)
+    assert decision["passed"] is False
+    assert any(w["code"] == "semantic_warnings_above_threshold" for w in decision["warnings"])
+
+
 def test_run_gate_applies_thresholds() -> None:
     policy = default_export_gate_policy()
     qa_report = {

@@ -16,19 +16,26 @@ STRUCTURAL_CODES = {
     "invalid_evidence_ref_item_type",
     "missing_status_after_canonicalization",
     "schema_contract_error",
+    "structural_warnings_above_threshold",
+    "missing_status_count_above_threshold",
 }
 PROVENANCE_CODES = {
     "broken_evidence_ref",
     "provenance_resolution_below_threshold",
     "provenance_utilization_below_threshold",
+    "provenance_warnings_above_threshold",
+    "provenance_utilization_below_record_threshold",
 }
 SEMANTIC_CODES = {
     "observed_hedging_language",
     "uncertain_high_confidence",
     "inferred_without_evidence",
+    "semantic_warnings_above_threshold",
+    "observed_hedging_warnings_above_threshold",
 }
 COMPLETENESS_CODES = {
     "partial_without_missing_data_reason",
+    "partial_record_disallowed",
 }
 
 
@@ -56,6 +63,15 @@ def default_export_gate_policy() -> dict[str, Any]:
             "min_evidence_resolution_rate": 1.0,
             "min_semantic_items_with_evidence_rate": 1.0,
             "max_broken_refs_count": 0,
+        },
+        "record_thresholds": {
+            "max_warning_categories": {},
+            "max_missing_status_count": None,
+            "max_observed_hedging_warnings_count": None,
+            "min_provenance_utilization_rate": None,
+        },
+        "job_status_rules": {
+            "allow_partial": True,
         },
     }
 
@@ -98,6 +114,63 @@ def evaluate_record_export_gate(record_report: dict, policy: dict | None = None)
     errors = list(validation.get("errors") or [])
     warnings = list(validation.get("warnings") or [])
     errors.extend(_schema_contract_issues(record_report))
+    metrics = validation.get("metrics") or {}
+    job_status = str(record_report.get("job_status") or "unknown")
+
+    warning_counts_pre = Counter(categorize_issue(str(w.get("code") or "")) for w in warnings)
+    record_thresholds = (policy.get("record_thresholds") or {})
+    max_warning_categories = record_thresholds.get("max_warning_categories") or {}
+    for cat, limit in max_warning_categories.items():
+        if limit is None:
+            continue
+        count = int(warning_counts_pre.get(cat, 0))
+        if count > int(limit):
+            code = f"{cat}_warnings_above_threshold"
+            warnings.append(
+                {
+                    "code": code,
+                    "path": "validation.warnings",
+                    "message": f"{cat} warnings count {count} exceeds threshold {limit}",
+                }
+            )
+
+    max_missing_status = record_thresholds.get("max_missing_status_count")
+    if max_missing_status is not None and int(metrics.get("missing_status_count", 0) or 0) > int(max_missing_status):
+        warnings.append(
+            {
+                "code": "missing_status_count_above_threshold",
+                "path": "validation.metrics.missing_status_count",
+                "message": f"missing_status_count {metrics.get('missing_status_count', 0)} exceeds threshold {max_missing_status}",
+            }
+        )
+    max_hedge = record_thresholds.get("max_observed_hedging_warnings_count")
+    if max_hedge is not None and int(metrics.get("observed_hedging_warnings_count", 0) or 0) > int(max_hedge):
+        warnings.append(
+            {
+                "code": "observed_hedging_warnings_above_threshold",
+                "path": "validation.metrics.observed_hedging_warnings_count",
+                "message": f"observed_hedging_warnings_count {metrics.get('observed_hedging_warnings_count', 0)} exceeds threshold {max_hedge}",
+            }
+        )
+    min_record_prov_util = record_thresholds.get("min_provenance_utilization_rate")
+    if min_record_prov_util is not None and float(metrics.get("provenance_utilization_rate", 0.0) or 0.0) < float(min_record_prov_util):
+        warnings.append(
+            {
+                "code": "provenance_utilization_below_record_threshold",
+                "path": "validation.metrics.provenance_utilization_rate",
+                "message": f"provenance_utilization_rate {metrics.get('provenance_utilization_rate', 0.0)} below threshold {min_record_prov_util}",
+            }
+        )
+
+    job_status_rules = (policy.get("job_status_rules") or {})
+    if job_status == "partial" and job_status_rules.get("allow_partial") is False:
+        warnings.append(
+            {
+                "code": "partial_record_disallowed",
+                "path": "job_meta.status",
+                "message": "job_status=partial is disallowed by policy",
+            }
+        )
 
     normalized_errors = []
     normalized_warnings = []
@@ -193,6 +266,17 @@ def evaluate_run_export_gate(
                 "metric": "semantic_items_with_evidence_rate",
                 "value": qgm.get("semantic_items_with_evidence_rate"),
                 "threshold": thresholds["min_semantic_items_with_evidence_rate"],
+            }
+        )
+    if "min_provenance_utilization_rate" in thresholds and thresholds.get("min_provenance_utilization_rate") is not None and qgm.get("provenance_utilization_rate", 0.0) < thresholds["min_provenance_utilization_rate"]:
+        run_issues.append(
+            {
+                "code": "provenance_utilization_below_threshold",
+                "category": "provenance",
+                "severity": "blocking_run_threshold",
+                "metric": "provenance_utilization_rate",
+                "value": qgm.get("provenance_utilization_rate"),
+                "threshold": thresholds["min_provenance_utilization_rate"],
             }
         )
 

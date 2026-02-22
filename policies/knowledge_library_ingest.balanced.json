@@ -1,0 +1,30 @@
+{
+  "version": "knowledge-library-ingest.balanced.v1",
+  "profile_intent": "Default working mode: keeps structural/provenance discipline while allowing non-blocking semantic warnings.",
+  "heuristics": [
+    "Allows partial jobs if they still pass QA/gate constraints.",
+    "Semantic warnings are non-blocking unless they imply unsupported inference without evidence."
+  ],
+  "blocking_warning_codes": [
+    "missing_status_after_canonicalization",
+    "inferred_without_evidence"
+  ],
+  "run_thresholds": {
+    "min_evidence_resolution_rate": 1.0,
+    "min_semantic_items_with_evidence_rate": 1.0,
+    "max_broken_refs_count": 0,
+    "min_provenance_utilization_rate": 0.2
+  },
+  "record_thresholds": {
+    "max_warning_categories": {
+      "structural": 0,
+      "provenance": 0
+    },
+    "max_missing_status_count": 0,
+    "max_observed_hedging_warnings_count": 2,
+    "min_provenance_utilization_rate": 0.1
+  },
+  "job_status_rules": {
+    "allow_partial": true
+  }
+}

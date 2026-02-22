@@ -57,8 +57,11 @@ def test_canonicalizer_maps_aliases_and_question_strings() -> None:
     assert isinstance(q, dict)
     assert q["status"] == "candidate"
     assert q["scope"] == "unknown"
+    assert q["_canonicalized"] is True
+    assert q["_canonicalization_notes"]
 
     assert record["trading_context_extract"]["htf_elements"][0]["label"] == "PDH"
+    assert result["canonicalization_trace"]
 
 
 def test_validator_detects_partial_without_missing_data_warning() -> None:

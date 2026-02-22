@@ -1,0 +1,36 @@
+{
+  "version": "knowledge-library-ingest.strict.v1",
+  "profile_intent": "Direct TRADING_WORD curation feed with low tolerance for semantic/provenance ambiguity.",
+  "heuristics": [
+    "Blocks semantic hedging warnings to reduce definitional noise.",
+    "Disallows partial jobs in ready stream.",
+    "Uses provenance utilization thresholds as a stricter documentation signal."
+  ],
+  "blocking_warning_codes": [
+    "missing_status_after_canonicalization",
+    "inferred_without_evidence",
+    "observed_hedging_language",
+    "semantic_warnings_above_threshold",
+    "observed_hedging_warnings_above_threshold",
+    "partial_record_disallowed",
+    "provenance_utilization_below_record_threshold"
+  ],
+  "run_thresholds": {
+    "min_evidence_resolution_rate": 1.0,
+    "min_semantic_items_with_evidence_rate": 1.0,
+    "max_broken_refs_count": 0,
+    "min_provenance_utilization_rate": 0.4
+  },
+  "record_thresholds": {
+    "max_warning_categories": {
+      "semantic": 0,
+      "provenance": 0
+    },
+    "max_missing_status_count": 0,
+    "max_observed_hedging_warnings_count": 0,
+    "min_provenance_utilization_rate": 0.4
+  },
+  "job_status_rules": {
+    "allow_partial": false
+  }
+}

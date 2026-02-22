@@ -38,6 +38,7 @@ def _paths(data_dir: Path) -> dict[str, Path]:
         "knowledge": data_dir / "processed" / "knowledge_extract.jsonl",
         "knowledge_canonical": data_dir / "processed" / "knowledge_extract_canonical.jsonl",
         "knowledge_quality_records": data_dir / "processed" / "knowledge_quality_records.jsonl",
+        "knowledge_canonicalization_trace": data_dir / "processed" / "knowledge_canonicalization_trace.jsonl",
         "knowledge_qa_report": data_dir / "processed" / "knowledge_qa_report.json",
         "knowledge_schema": data_dir / "processed" / "knowledge_canonical.schema.json",
         "knowledge_export_gate_report": data_dir / "processed" / "knowledge_export_gate_report.json",
@@ -176,6 +177,7 @@ def cmd_qa_knowledge(args: argparse.Namespace, config: AppConfig) -> int:
     if not args.no_write:
         write_jsonl(paths["knowledge_canonical"], result["canonical_records"])
         write_jsonl(paths["knowledge_quality_records"], result["record_reports"])
+        write_jsonl(paths["knowledge_canonicalization_trace"], result["canonicalization_trace_rows"])
         write_json(paths["knowledge_qa_report"], result["qa_report"])
 
     logger.info(
