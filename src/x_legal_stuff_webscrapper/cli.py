@@ -42,19 +42,29 @@ def cmd_collect(args: argparse.Namespace, config: AppConfig) -> int:
     tag_filters = args.tags or config.x_filter_tags
     text_filters = args.queries or config.x_filter_keywords
     use_filters = args.mode == "filtered" or bool(tag_filters or text_filters)
-    posts = collect_public_posts(
-        handles=handles,
-        limit_per_account=args.limit,
-        tag_filters=tag_filters if use_filters else None,
-        text_filters=text_filters if use_filters else None,
-        match_mode=args.match_mode,
-    )
+    backend = args.backend if args.backend != "auto" else config.x_collect_backend
+
+    try:
+        posts = collect_public_posts(
+            handles=handles,
+            limit_per_account=args.limit,
+            backend=backend,
+            x_api_bearer_token=config.x_api_bearer_token,
+            tag_filters=tag_filters if use_filters else None,
+            text_filters=text_filters if use_filters else None,
+            match_mode=args.match_mode,
+        )
+    except Exception as exc:
+        logger.error("Collect failed: %s", exc)
+        return 1
+
     append_jsonl(paths["raw_posts"], posts)
     append_jsonl(paths["processed_posts"], posts)
     logger.info(
-        "Collected %s posts from %s accounts (mode=%s, tags=%s, queries=%s, match=%s)",
+        "Collected %s posts from %s accounts (backend=%s, mode=%s, tags=%s, queries=%s, match=%s)",
         len(posts),
         len(handles),
+        backend,
         "filtered" if use_filters else "all",
         tag_filters if use_filters else [],
         text_filters if use_filters else [],
@@ -100,7 +110,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     collect = subparsers.add_parser("collect", help="Collect public posts from configured X accounts")
     collect.add_argument("--account", dest="accounts", action="append", help="Source account handle (repeatable)")
-    collect.add_argument("--limit", type=int, default=5, help="Max posts per account (placeholder collector)")
+    collect.add_argument("--limit", type=int, default=5, help="Max posts per account")
+    collect.add_argument(
+        "--backend",
+        choices=["auto", "placeholder", "x-api-recent-search"],
+        default="auto",
+        help="Collection backend (official X API recent search or placeholder)",
+    )
     collect.add_argument(
         "--mode",
         choices=["all", "filtered"],

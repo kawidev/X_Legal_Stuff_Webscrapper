@@ -14,6 +14,7 @@ class AppConfig:
     openai_api_key: str | None
     x_api_bearer_token: str | None
     x_source_accounts: list[str]
+    x_collect_backend: str
     x_filter_tags: list[str]
     x_filter_keywords: list[str]
     data_dir: Path
@@ -26,6 +27,7 @@ class AppConfig:
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             x_api_bearer_token=os.getenv("X_API_BEARER_TOKEN"),
             x_source_accounts=_split_csv(os.getenv("X_SOURCE_ACCOUNTS", "")),
+            x_collect_backend=os.getenv("X_COLLECT_BACKEND", "auto"),
             x_filter_tags=_split_csv(os.getenv("X_FILTER_TAGS", "")),
             x_filter_keywords=_split_csv(os.getenv("X_FILTER_KEYWORDS", "")),
             data_dir=data_dir,

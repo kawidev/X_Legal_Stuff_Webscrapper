@@ -8,6 +8,7 @@ def test_cli_has_expected_subcommands() -> None:
     assert namespace.command == "collect"
     assert namespace.accounts == ["example"]
     assert namespace.limit == 2
+    assert namespace.backend == "auto"
 
 
 def test_cli_collect_supports_filter_args() -> None:
@@ -30,3 +31,10 @@ def test_cli_collect_supports_filter_args() -> None:
     assert namespace.tags == ["ICT"]
     assert namespace.queries == ["ICT 2026 Mentorship"]
     assert namespace.match_mode == "all"
+
+
+def test_cli_collect_supports_backend_option() -> None:
+    parser = build_parser()
+    namespace = parser.parse_args(["collect", "--backend", "x-api-recent-search"])
+
+    assert namespace.backend == "x-api-recent-search"
